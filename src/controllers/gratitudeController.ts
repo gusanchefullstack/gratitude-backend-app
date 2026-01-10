@@ -5,7 +5,7 @@ import {
   createGratitudeSvc,
   updateGratitudeSvc,
   deleteGratitudeSvc,
-} from "#services/gratitudeServices.js";
+} from "../services/gratitudeServices";
 
 export const getAllGratitudes = async (
   req: Request,
