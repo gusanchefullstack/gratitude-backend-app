@@ -5,6 +5,6 @@
     "rootDir": "./",
     "module": "NodeNext"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["dist"]
 }
