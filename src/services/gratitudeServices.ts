@@ -1,3 +1,4 @@
+import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 export const readAllGratitudesSvc = async () => {
   try {
@@ -35,7 +36,7 @@ export const readOneGratitudeSvc = async (id: string) => {
   }
 };
 
-export const createGratitudeSvc = async (data) => {
+export const createGratitudeSvc = async (data:Prisma.GratitudeCreateInput) => {
   try {
       const listIfGratitude = await prisma.gratitude.create({
         data
@@ -50,7 +51,7 @@ export const createGratitudeSvc = async (data) => {
   }
 };
 
-export const updateGratitudeSvc = async (id: string, data) => {
+export const updateGratitudeSvc = async (id: string, data:Prisma.GratitudeUpdateInput) => {
   try {
     const listOfGratitude = await prisma.gratitude.update({where:{id}, data:{...data}})
     return {
