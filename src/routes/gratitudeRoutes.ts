@@ -1,20 +1,17 @@
 import { Router } from "express";
-import { Request, Response, NextFunction } from "express";
+import {
+  createGratitude,
+  deleteGratitude,
+  getAllGratitudes,
+  getSingleGratitude,
+  updateGratitude,
+} from "#controllers/gratitudeController.js";
 const gratitudesRouter = Router();
 
-gratitudesRouter.get("/", (req, res) => {
-    res.json({ message: "Get All" })
-})
-gratitudesRouter.get("/:id", (req, res) => {
-    res.json({ message: "Get One"})
-})
-gratitudesRouter.post("/", (req, res) => {
-    res.json({ message: "Post"})
-})
-gratitudesRouter.patch("/:id", (req, res) => {
-    res.json({ message: "Patch"})
-})
-gratitudesRouter.delete("/:id", (req, res) => {
-    res.json({ message: "Delete"})
-})
+gratitudesRouter.get("/", getAllGratitudes);
+gratitudesRouter.get("/:id", getSingleGratitude);
+gratitudesRouter.post("/", createGratitude);
+gratitudesRouter.patch("/:id", updateGratitude);
+gratitudesRouter.delete("/:id", deleteGratitude);
+
 export default gratitudesRouter;
