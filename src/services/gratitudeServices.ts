@@ -20,7 +20,7 @@ export const readOneGratitudeSvc = async (id: string) => {
     });
     if (!listOfGratitude) {
       return {
-        status: "Ok",
+        status: "Gratitude not found",
         data: [],
         items: 0,
       };
