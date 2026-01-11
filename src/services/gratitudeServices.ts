@@ -1,3 +1,4 @@
+import { error } from "node:console";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 export const readAllGratitudesSvc = async () => {
@@ -20,7 +21,7 @@ export const readOneGratitudeSvc = async (id: string) => {
     });
     if (!listOfGratitude) {
       return {
-        status: "Gratitude not found",
+        status: "Gratitudes not found",
         data: [],
         items: 0,
       };

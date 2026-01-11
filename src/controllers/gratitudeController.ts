@@ -14,6 +14,9 @@ export const getAllGratitudes = async (
 ) => {
   try {
     const gratitudes = await readAllGratitudesSvc();
+    if (gratitudes.data.length === 0) {
+      return res.status(404).json({ message: "Gratitudes not found" });
+    }
     return res.json(gratitudes);
   } catch (error) {
     next(error);
@@ -27,6 +30,9 @@ export const getSingleGratitude = async (
   try {
     const { id } = req.params;
     const gratitude = await readOneGratitudeSvc(id);
+    if (gratitude.data.length === 0) {
+      return res.status(404).json({ message: "Gratitude not found" });
+    }
     return res.json(gratitude);
   } catch (error) {
     next(error);
@@ -40,7 +46,7 @@ export const createGratitude = async (
   try {
     const data = req.body;
     const gratitude = await createGratitudeSvc(data);
-    return res.json(gratitude);
+    return res.status(201).json(gratitude);
   } catch (error) {
     next(error);
   }
