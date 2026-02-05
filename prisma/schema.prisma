@@ -13,11 +13,27 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id         String      @id @default(uuid())
+  username   String      @unique
+  password   String
+  firstName  String
+  lastName   String
+  email      String      @unique
+  gratitudes Gratitude[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("users")
+}
+
 model Gratitude {
   id        String   @id @default(uuid())
   title     String   @unique
   details   String
   tags      String[]
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

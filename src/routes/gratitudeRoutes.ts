@@ -1,13 +1,13 @@
 import { Router } from "express";
 import {
   createGratitude,
-  deleteGratitude,
   getAllGratitudes,
   getSingleGratitude,
   updateGratitude,
-} from "#controllers/gratitudeController.js";
-const gratitudesRouter = Router();
+  deleteGratitude,
+} from "../controllers/gratitudeController";
 
+const gratitudesRouter = Router();
 gratitudesRouter.get("/", getAllGratitudes);
 gratitudesRouter.get("/:id", getSingleGratitude);
 gratitudesRouter.post("/", createGratitude);
