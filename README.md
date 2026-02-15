@@ -1,10 +1,10 @@
 # Gratitude App - Backend API
 
-A RESTful API for managing gratitude entries with authentication support, built with Express.js, TypeScript, and PostgreSQL.
+A RESTful API for managing gratitude entries with full JWT authentication, built with Express.js, TypeScript, and PostgreSQL.
 
 ## Overview
 
-This is the backend service for the Gratitude App, a fullstack application that helps users record and manage their daily gratitudes. The backend provides a complete CRUD API for gratitude entries and is being extended with user authentication capabilities.
+This is the backend service for the Gratitude App, a fullstack application that helps users record and manage their daily gratitudes. The backend provides a complete CRUD API for gratitude entries with user authentication, authorization, and data isolation.
 
 ## Tech Stack
 
@@ -20,18 +20,27 @@ This is the backend service for the Gratitude App, a fullstack application that 
 
 ```
 src/
-├── index.ts                          # Express app setup with CORS and JSON middleware
+├── index.ts                          # Express app entry point
 ├── controllers/
-│   ├── gratitudeController.ts        # CRUD handlers for gratitudes (complete)
-│   └── authController.ts             # Auth handlers (in progress)
+│   ├── gratitudeController.ts        # CRUD handlers for gratitudes ✅
+│   └── authController.ts             # Authentication handlers ✅
 ├── routes/
 │   ├── index.ts                      # Main router /api/v1 setup
-│   ├── gratitudeRoutes.ts            # Gratitude CRUD routes
-│   └── authRoutes.ts                 # Auth routes (skeleton)
+│   ├── gratitudeRoutes.ts            # Gratitude CRUD routes (protected)
+│   └── authRoutes.ts                 # Auth routes (register/login)
 ├── services/
-│   └── gratitudeServices.ts          # Prisma database operations
+│   ├── gratitudeServices.ts          # Prisma database operations
+│   └── authServices.ts               # User registration & login logic
+├── middleware/
+│   ├── auth.ts                       # JWT authentication middleware
+│   ├── validation.ts                 # Zod schema validation middleware
+│   └── errorHandler.ts               # Error handling middleware
+├── schemas/
+│   ├── gratitude.schema.ts           # Gratitude validation schemas
+│   ├── user.schema.ts                # User validation schemas
+│   └── common.schema.ts              # Shared schemas (UUID, password)
 └── utils/
-    ├── jwt.ts                        # JWT token generation
+    ├── jwt.ts                        # JWT token generation & verification
     └── passwords.ts                  # bcrypt password hashing
 
 lib/
@@ -44,39 +53,65 @@ prisma/
 
 ## Database Schema
 
+### User Model
+
+```prisma
+model User {
+  id         String      @id @default(uuid())
+  username   String      @unique
+  password   String      # Hashed with bcrypt
+  firstName  String
+  lastName   String
+  email      String      @unique
+  gratitudes Gratitude[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@map("users")
+}
+```
+
 ### Gratitude Model
 
 ```prisma
 model Gratitude {
-  id         String   @id @default(uuid())
-  title      String   @unique
-  details    String
-  tags       String[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(uuid())
+  title     String   @unique
+  details   String
+  tags      String[]
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("gratitudes")
 }
 ```
 
+**Relationship**: One User can have many Gratitudes. Each Gratitude belongs to one User.
+
 ## API Endpoints
 
-### Gratitudes
+### Authentication (Public)
 
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| GET | `/api/v1/gratitudes` | Get all gratitudes | ✅ Complete |
-| GET | `/api/v1/gratitudes/:id` | Get single gratitude by ID | ✅ Complete |
-| POST | `/api/v1/gratitudes` | Create new gratitude | ✅ Complete |
-| PATCH | `/api/v1/gratitudes/:id` | Update gratitude | ✅ Complete |
-| DELETE | `/api/v1/gratitudes/:id` | Delete gratitude | ✅ Complete |
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/v1/auth/register` | Register new user | No |
+| POST | `/api/v1/auth/login` | User login | No |
 
-### Authentication
+### Gratitudes (Protected 🔒)
 
-| Method | Endpoint | Description | Status |
-|--------|----------|-------------|--------|
-| POST | `/api/v1/auth/register` | Register new user | ⚠️ In Progress |
-| POST | `/api/v1/auth/login` | User login | ❌ Not Started |
+All gratitude endpoints require JWT authentication via `Authorization: Bearer <token>` header.
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/gratitudes` | Get all user's gratitudes | Yes 🔒 |
+| GET | `/api/v1/gratitudes/:id` | Get single gratitude by ID | Yes 🔒 |
+| POST | `/api/v1/gratitudes` | Create new gratitude | Yes 🔒 |
+| PATCH | `/api/v1/gratitudes/:id` | Update gratitude | Yes 🔒 |
+| DELETE | `/api/v1/gratitudes/:id` | Delete gratitude | Yes 🔒 |
+
+**Note**: All gratitude operations are user-scoped. Users can only access, create, update, and delete their own gratitudes.
 
 ## Setup Instructions
 
@@ -107,6 +142,7 @@ model Gratitude {
    ```
    PORT=3000
    DATABASE_URL="postgresql://username:password@localhost:5432/gratitude_db"
+   JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
    ```
 
 4. Run database migrations:
@@ -138,11 +174,67 @@ npm start
 
 ## API Usage Examples
 
-### Create a Gratitude
+### Register a New User
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "email": "john@example.com",
+    "password": "SecurePass123!",
+    "firstName": "John",
+    "lastName": "Doe"
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "User created",
+  "user": {
+    "id": "uuid-here",
+    "username": "johndoe",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john@example.com"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Login
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "johndoe",
+    "password": "SecurePass123!"
+  }'
+```
+
+**Response:**
+```json
+{
+  "message": "Login success",
+  "user": {
+    "id": "uuid-here",
+    "username": "johndoe",
+    "firstName": "John",
+    "lastName": "Doe",
+    "email": "john@example.com"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+### Create a Gratitude (Protected)
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/gratitudes \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
     "title": "Beautiful sunrise",
     "details": "Watched an amazing sunrise this morning",
@@ -150,113 +242,222 @@ curl -X POST http://localhost:3000/api/v1/gratitudes \
   }'
 ```
 
-### Get All Gratitudes
+### Get All Gratitudes (Protected)
 
 ```bash
-curl http://localhost:3000/api/v1/gratitudes
+curl http://localhost:3000/api/v1/gratitudes \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
-### Update a Gratitude
+### Update a Gratitude (Protected)
 
 ```bash
 curl -X PATCH http://localhost:3000/api/v1/gratitudes/{id} \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -d '{
     "title": "Updated title",
     "details": "Updated details"
   }'
 ```
 
-### Delete a Gratitude
+### Delete a Gratitude (Protected)
 
 ```bash
-curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id}
+curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 ## Current Implementation Status
 
 ### ✅ Completed Features
 
-- Complete CRUD operations for gratitudes
-- Express middleware setup (CORS, JSON parsing)
-- Prisma ORM integration with PostgreSQL
-- TypeScript configuration with strict mode
-- Database migrations for gratitudes table
-- JWT token generation utility
-- Password hashing utility
-- Tag array support for gratitudes
+- **Authentication & Authorization**:
+  - User registration with password hashing (bcrypt, 10 salt rounds)
+  - User login with JWT token generation (1-day expiration)
+  - JWT authentication middleware (`authenticateToken`)
+  - Protected routes with Bearer token verification
+  - User model in Prisma schema with relationships
 
-### ⚠️ In Progress
+- **CRUD Operations**:
+  - Complete gratitude CRUD operations
+  - User-scoped data access (users can only access their own gratitudes)
+  - User-gratitude relationship enforced at database level
 
-- Authentication system:
-  - Register endpoint skeleton created (`src/controllers/authController.ts`)
-  - Auth routes defined but not integrated into main router (`src/routes/index.ts:7`)
-  - JWT and password utilities ready for use
+- **Validation**:
+  - Zod schemas for request validation
+  - Validation middleware for body, params, and query
+  - Strong password requirements (8-50 chars, uppercase, lowercase, number, special char)
+  - Username validation (3-20 chars, alphanumeric + underscore)
+  - Email validation
 
-### ❌ Pending
+- **Infrastructure**:
+  - Express middleware setup (CORS, JSON parsing)
+  - Prisma ORM integration with PostgreSQL
+  - TypeScript configuration with strict mode
+  - Database migrations for users and gratitudes
+  - Tag array support for gratitudes
 
-- Complete user registration endpoint
-- User login endpoint
-- JWT authentication middleware
-- User model in Prisma schema
-- Protected routes requiring authentication
+### ⚠️ Known Limitations
+
+1. **Error Handler Incomplete**: `src/middleware/errorHandler.ts` doesn't send response (needs implementation)
+2. **No Token Refresh**: JWT tokens expire after 1 day with no refresh mechanism
+3. **CORS Wide Open**: Currently allows all origins (development mode only)
+4. **No Rate Limiting**: API endpoints are not rate-limited
+5. **No Request Logging**: Missing request/response logging middleware
+6. **No Password Reset**: Missing password reset functionality
+7. **No Email Verification**: Users can register without email verification
+
+### 🔮 Future Enhancements
+
 - Token refresh mechanism
-- User-gratitude relationship (associate gratitudes with users)
+- Password reset functionality
+- Email verification
+- Rate limiting
+- Request logging (Morgan or Winston)
+- API documentation (Swagger/OpenAPI)
+- Unit and integration tests
+- CI/CD pipeline
+- Environment-based CORS configuration
 
-## Known Issues
+## Security Features
 
-1. **Auth routes not wired:** Line 7 in `src/routes/index.ts` is missing the `authRouter` parameter
-2. **Incomplete register function:** `src/controllers/authController.ts` has skeleton code
-3. **Missing HTTP status codes:** Controllers should return appropriate status codes
-4. **Untyped parameters:** Some service functions have `any` type parameters
-5. **No request validation:** Need to add input validation middleware
-6. **No error handling middleware:** Global error handler needed
+### Authentication & Authorization
+- **Password Hashing**: bcrypt with 10 salt rounds
+- **JWT Tokens**: HS256 algorithm with 1-day expiration
+- **Protected Routes**: All gratitude endpoints require valid JWT
+- **User Data Isolation**: Users can only access their own data
+
+### Validation
+- **Input Validation**: Zod schemas validate all request data
+- **Password Requirements**:
+  - Minimum 8 characters, maximum 50
+  - At least one uppercase letter
+  - At least one lowercase letter
+  - At least one number
+  - At least one special character
+- **Username Rules**: 3-20 characters, alphanumeric + underscore only
+- **Email Validation**: Proper email format required
+
+### Best Practices
+- Passwords never stored in plain text
+- JWT secrets stored in environment variables
+- User IDs embedded in tokens (no user lookup on every request)
+- Unique constraints on username and email
+- TypeScript for type safety
 
 ## Integration with Frontend
 
 The backend is designed to work with the React frontend located at:
 `/Users/gusanche/fsdev/fullstack/gratitude-frontend-app`
 
+### Frontend Tech Stack
+- **Framework**: React 19.2.0 with TypeScript
+- **Build Tool**: Vite 7.2.4
+- **Styling**: TailwindCSS 4.1.18
+- **Icons**: React Icons + Font Awesome
+
 ### CORS Configuration
 
-CORS is enabled for all origins (development mode). Configure appropriately for production.
+CORS is enabled for all origins (development mode). Configure appropriately for production:
 
-### Expected Frontend Connection
+```javascript
+// For production
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'https://yourdomain.com'
+}));
+```
 
+### Frontend Integration Guide
+
+**1. API Base URL**
 ```javascript
 const API_BASE_URL = 'http://localhost:3000/api/v1';
 ```
 
+**2. Authentication Flow**
+```javascript
+// Register
+const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username, email, password, firstName, lastName })
+});
+const { token, user } = await response.json();
+localStorage.setItem('token', token);
+
+// Login
+const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username, password })
+});
+const { token, user } = await response.json();
+localStorage.setItem('token', token);
+```
+
+**3. Protected API Calls**
+```javascript
+const token = localStorage.getItem('token');
+const response = await fetch(`${API_BASE_URL}/gratitudes`, {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+**4. Frontend TODO**
+- [ ] Create Login/Register pages
+- [ ] Implement token storage (localStorage/sessionStorage)
+- [ ] Create authentication context
+- [ ] Add Authorization header to all API calls
+- [ ] Handle token expiration (401/403 responses)
+- [ ] Implement logout functionality
+- [ ] Wire up edit/delete buttons on gratitude cards
+
 ## Development Roadmap
 
-### Phase 1: Complete Authentication (Current)
-- [ ] Wire up auth routes to main router
-- [ ] Complete user registration endpoint
-- [ ] Add User model to Prisma schema
-- [ ] Implement login endpoint
-- [ ] Create authentication middleware
+### ✅ Phase 1: Complete Authentication
+- [x] Wire up auth routes to main router
+- [x] Complete user registration endpoint
+- [x] Add User model to Prisma schema
+- [x] Implement login endpoint
+- [x] Create authentication middleware
+- [x] Add request validation with Zod
 
-### Phase 2: Secure Gratitudes
-- [ ] Add user-gratitude relationship
-- [ ] Protect gratitude routes with auth middleware
-- [ ] Filter gratitudes by authenticated user
-- [ ] Add user context to controllers
+### ✅ Phase 2: Secure Gratitudes
+- [x] Add user-gratitude relationship
+- [x] Protect gratitude routes with auth middleware
+- [x] Filter gratitudes by authenticated user
+- [x] Add user context to controllers
 
-### Phase 3: Enhancements
-- [ ] Add request validation (express-validator or zod)
+### 🚧 Phase 3: Frontend Integration (Current)
+- [ ] Complete error handler middleware
+- [ ] Build Login/Register UI in frontend
+- [ ] Implement token management in frontend
+- [ ] Wire up frontend authentication context
+- [ ] Connect frontend CRUD operations to backend
+- [ ] Handle authentication errors gracefully
+
+### 📋 Phase 4: Production Readiness
 - [ ] Implement refresh token rotation
 - [ ] Add password reset functionality
 - [ ] Add email verification
-- [ ] Implement rate limiting
-- [ ] Add comprehensive error handling
-- [ ] Add request logging
+- [ ] Implement rate limiting (express-rate-limit)
+- [ ] Add request logging (Morgan/Winston)
+- [ ] Environment-based CORS configuration
+- [ ] Add health check endpoint
+- [ ] Set up database connection pooling
 
-### Phase 4: Testing & Quality
-- [ ] Write unit tests for services
-- [ ] Write integration tests for routes
+### 🧪 Phase 5: Testing & Quality
+- [ ] Write unit tests for services (Jest/Vitest)
+- [ ] Write integration tests for routes (Supertest)
 - [ ] Add API documentation (Swagger/OpenAPI)
-- [ ] Set up CI/CD pipeline
+- [ ] Set up CI/CD pipeline (GitHub Actions)
 - [ ] Add code coverage reporting
+- [ ] Add database seeding scripts
+- [ ] Performance testing and optimization
 
 ## Scripts
 
@@ -281,11 +482,11 @@ This is a personal project. For changes:
 ## Recent Git History
 
 ```
+6f0cc6b Add authentication and authorization to CRUD routes
+5c3c309 Add schema validation for user and gratitude routes
+76b7f70 Add route for register user and create user model in prisma
+39d236e Add preliminary README.md, begin implementation of jwt authentication
 a089a0f Add CRUD services for gratitude
-38d2f6a Add CRUD controller for gratitudes
-e7cf7bb Add CRUD routes for gratitudes
-4d7f8b6 Add cors and express.json middlewares
-095abae Initial setup of app and router
 ```
 
 ## License
@@ -294,6 +495,6 @@ Private project - All rights reserved
 
 ---
 
-**Last Updated:** 2026-02-03
-**Status:** Active Development
-**Version:** 0.1.0 (Pre-release)
+**Last Updated:** 2026-02-15
+**Status:** Backend Complete - Frontend Integration in Progress
+**Version:** 1.0.0 (Backend Ready)
