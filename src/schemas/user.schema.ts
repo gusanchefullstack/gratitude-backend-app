@@ -45,3 +45,9 @@ export const updateUserBodySchema = userBaseSchema
 export const userParamsSchema = z.object({
   userId: uuidSchema,
 });
+
+//Login User
+export const userLoginSchema = z.object({
+  username: z.string().min(1, 'Password is required'),
+  password: z.string().min(1, 'Password is required'),
+})

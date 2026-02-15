@@ -8,9 +8,11 @@ import {
 } from "../controllers/gratitudeController";
 import {
   createGratitudeBodySchema,
+  updateGratitudeBodySchema,
   gratitudeParamsSchema,
 } from "../schemas/gratitude.schema";
 import { validateParams, validateBody } from "../middleware/validation";
+
 
 const gratitudesRouter = Router();
 gratitudesRouter.get("/", getAllGratitudes);
@@ -27,7 +29,7 @@ gratitudesRouter.post(
 gratitudesRouter.patch(
   "/:id",
   validateParams(gratitudeParamsSchema),
-  validateBody(),
+  validateBody(updateGratitudeBodySchema),
   updateGratitude,
 );
 gratitudesRouter.delete(
