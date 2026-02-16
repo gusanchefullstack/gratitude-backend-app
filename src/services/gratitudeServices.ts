@@ -1,4 +1,6 @@
 import { prisma } from "../../lib/prisma";
+import { Prisma } from "../../generated/prisma/client";
+import { ConflictError, NotFoundError, DatabaseError } from "../utils/errors.js";
 export const createGratitudeSvc = async (data) => {
   try {
       const listIfGratitude = await prisma.gratitude.create({
@@ -10,7 +12,26 @@ export const createGratitudeSvc = async (data) => {
         items: Array(listIfGratitude).length,
       };
   } catch (error) {
-    throw error
+    // Transform Prisma errors into custom errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2002 - Unique constraint violation (title already exists)
+      if (error.code === 'P2002') {
+        const target = error.meta?.target as string[] | undefined;
+        const field = target?.[0] || 'title';
+        throw new ConflictError(`Gratitude with this ${field} already exists`);
+      }
+
+      // P2003 - Foreign key constraint failed (invalid userId)
+      if (error.code === 'P2003') {
+        throw new NotFoundError('User not found');
+      }
+
+      // Other Prisma errors
+      throw new DatabaseError('Failed to create gratitude', error.code);
+    }
+
+    // Unknown errors pass through
+    throw error;
   }
 };
 export const readAllGratitudesSvc = async (userId:string) => {
@@ -26,6 +47,12 @@ export const readAllGratitudesSvc = async (userId:string) => {
       items: listOfGratitude.length,
     };
   } catch (error) {
+    // Transform Prisma errors into custom errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      throw new DatabaseError('Failed to retrieve gratitudes', error.code);
+    }
+
+    // Unknown errors pass through
     throw error;
   }
 };
@@ -52,6 +79,12 @@ export const readOneGratitudeSvc = async (userId:string, id: string) => {
       };
     }
   } catch (error) {
+    // Transform Prisma errors into custom errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      throw new DatabaseError('Failed to retrieve gratitude', error.code);
+    }
+
+    // Unknown errors pass through
     throw error;
   }
 };
@@ -66,7 +99,26 @@ export const updateGratitudeSvc = async (userId: string, id: string, data) => {
         items: Array(listOfGratitude).length,
       };
   } catch (error) {
-    throw error
+    // Transform Prisma errors into custom errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2025 - Record not found
+      if (error.code === 'P2025') {
+        throw new NotFoundError('Gratitude not found');
+      }
+
+      // P2002 - Unique constraint violation (title already exists)
+      if (error.code === 'P2002') {
+        const target = error.meta?.target as string[] | undefined;
+        const field = target?.[0] || 'title';
+        throw new ConflictError(`Gratitude with this ${field} already exists`);
+      }
+
+      // Other Prisma errors
+      throw new DatabaseError('Failed to update gratitude', error.code);
+    }
+
+    // Unknown errors pass through
+    throw error;
   }
 };
 
@@ -83,6 +135,18 @@ export const deleteGratitudeSvc = async (userId:string, id: string) => {
         items: Array(listOfGratitude).length,
       };
   } catch (error) {
-    throw error
+    // Transform Prisma errors into custom errors
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      // P2025 - Record not found
+      if (error.code === 'P2025') {
+        throw new NotFoundError('Gratitude not found');
+      }
+
+      // Other Prisma errors
+      throw new DatabaseError('Failed to delete gratitude', error.code);
+    }
+
+    // Unknown errors pass through
+    throw error;
   }
 };

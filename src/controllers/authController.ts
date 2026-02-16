@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { generateToken } from "../utils/jwt";
 import { hashPasswords, comparePasswords } from "../utils/passwords";
 import { registerUser, login } from "../services/authServices";
+import { AuthenticationError } from "../utils/errors.js";
 
 export const loginUser = async (
   req: Request,
@@ -13,7 +14,7 @@ export const loginUser = async (
     const { username, password } = req.body;
     const data = await login({ username, password });
     if (!data) {
-      return res.status(401).json({ message: "Invalid username or password" });
+      throw new AuthenticationError("Invalid username or password");
     }
 
     return res.status(201).json({
@@ -41,8 +42,6 @@ export const registerNewUser = async (
       token: data.token
     });
   } catch (error) {
-    /*     console.log("Registration error...");
-        res.status(500).json({ error: "Failed to create user." }); */
     next(error);
   }
 };

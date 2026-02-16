@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { z, ZodError } from "zod";
+import { ValidationError } from "../utils/errors.js";
 
 export const validateBody = (schema: z.ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -9,13 +10,13 @@ export const validateBody = (schema: z.ZodSchema) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          error: "Validation failed",
-          details: error.issues.map((err) => ({
+        throw new ValidationError(
+          "Validation failed",
+          error.issues.map((err) => ({
             field: err.path.join("."),
             message: err.message,
-          })),
-        });
+          }))
+        );
       }
       next(error);
     }
@@ -29,13 +30,13 @@ export const validateParams = (schema: z.ZodSchema) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          error: "Invalid parameters",
-          details: error.issues.map((err) => ({
+        throw new ValidationError(
+          "Invalid parameters",
+          error.issues.map((err) => ({
             field: err.path.join("."),
             message: err.message,
-          })),
-        });
+          }))
+        );
       }
       next(error);
     }
@@ -49,13 +50,13 @@ export const validateQuery = (schema: z.ZodSchema) => {
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        return res.status(400).json({
-          error: "Invalid query parameters",
-          details: error.issues.map((err) => ({
+        throw new ValidationError(
+          "Invalid query parameters",
+          error.issues.map((err) => ({
             field: err.path.join("."),
             message: err.message,
-          })),
-        });
+          }))
+        );
       }
       next(error);
     }

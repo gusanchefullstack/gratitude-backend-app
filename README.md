@@ -41,7 +41,8 @@ src/
 │   └── common.schema.ts              # Shared schemas (UUID, password)
 └── utils/
     ├── jwt.ts                        # JWT token generation & verification
-    └── passwords.ts                  # bcrypt password hashing
+    ├── passwords.ts                  # bcrypt password hashing
+    └── errors.ts                     # Custom error classes ✅
 
 lib/
 └── prisma.ts                         # Prisma client initialization
@@ -268,6 +269,185 @@ curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
+## Error Handling
+
+The API implements comprehensive error handling with consistent JSON responses and appropriate HTTP status codes.
+
+### Error Response Format
+
+All errors follow this standardized format:
+
+```json
+{
+  "error": "Human-readable error message",
+  "code": "ERROR_CODE",
+  "details": [
+    {
+      "field": "fieldName",
+      "message": "Field-specific error message"
+    }
+  ],
+  "stack": "Error stack trace (development only)"
+}
+```
+
+### HTTP Status Codes
+
+| Status Code | Error Type | Description |
+|-------------|------------|-------------|
+| 400 | Bad Request | Validation errors, invalid input data |
+| 401 | Unauthorized | Missing, invalid, or expired authentication token |
+| 403 | Forbidden | Insufficient permissions |
+| 404 | Not Found | Requested resource doesn't exist |
+| 409 | Conflict | Duplicate resource (username, email, etc.) |
+| 500 | Internal Server Error | Unexpected server errors |
+
+### Error Examples
+
+#### Validation Error (400)
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ab", "email": "invalid", "password": "weak"}'
+```
+
+**Response:**
+```json
+{
+  "error": "Validation failed",
+  "code": "VALIDATION_ERROR",
+  "details": [
+    {
+      "field": "username",
+      "message": "String must contain at least 3 character(s)"
+    },
+    {
+      "field": "email",
+      "message": "Invalid email"
+    },
+    {
+      "field": "password",
+      "message": "It must contain at least one capital letter"
+    }
+  ]
+}
+```
+
+#### Authentication Error (401)
+
+```bash
+# Missing token
+curl http://localhost:3000/api/v1/gratitudes
+```
+
+**Response:**
+```json
+{
+  "error": "Authentication token required",
+  "code": "AUTHENTICATION_ERROR"
+}
+```
+
+```bash
+# Expired token
+curl http://localhost:3000/api/v1/gratitudes \
+  -H "Authorization: Bearer <expired_token>"
+```
+
+**Response:**
+```json
+{
+  "error": "Token has expired",
+  "code": "AUTHENTICATION_ERROR"
+}
+```
+
+```bash
+# Invalid credentials
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "wrong", "password": "wrong"}'
+```
+
+**Response:**
+```json
+{
+  "error": "Invalid username or password",
+  "code": "AUTHENTICATION_ERROR"
+}
+```
+
+#### Conflict Error (409)
+
+```bash
+# Duplicate username
+curl -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "existing_user",
+    "email": "newemail@example.com",
+    "password": "SecurePass123!",
+    "firstName": "John",
+    "lastName": "Doe"
+  }'
+```
+
+**Response:**
+```json
+{
+  "error": "username already exists",
+  "code": "CONFLICT_ERROR"
+}
+```
+
+#### Not Found Error (404)
+
+```bash
+curl -X GET http://localhost:3000/api/v1/gratitudes/non-existent-uuid \
+  -H "Authorization: Bearer <valid_token>"
+```
+
+**Response:**
+```json
+{
+  "error": "Gratitude not found",
+  "code": "NOT_FOUND_ERROR"
+}
+```
+
+### Error Handling Architecture
+
+The error handling system uses a **centralized global error handler** with custom error classes:
+
+**Custom Error Classes:**
+- `AppError` - Base class for all operational errors
+- `ValidationError` (400) - Zod validation failures
+- `AuthenticationError` (401) - Missing/invalid/expired tokens, invalid credentials
+- `AuthorizationError` (403) - Insufficient permissions
+- `NotFoundError` (404) - Resource not found
+- `ConflictError` (409) - Unique constraint violations
+- `DatabaseError` (500) - Database operation failures
+
+**Error Flow:**
+1. Middleware/Controller/Service throws custom error or native error
+2. Global error handler catches all errors
+3. Transforms native errors (Zod, Prisma, JWT) into custom errors
+4. Formats consistent JSON response
+5. Logs error with appropriate severity level
+6. Returns response with correct HTTP status code
+
+**Prisma Error Transformation:**
+- `P2002` (Unique constraint) → 409 ConflictError with field name
+- `P2025` (Record not found) → 404 NotFoundError
+- `P2003` (Foreign key failed) → 400 ValidationError
+- `P2014` (Required relation) → 400 ValidationError
+- Other Prisma errors → 500 DatabaseError
+
+**Environment-Specific Behavior:**
+- **Development**: Detailed error messages, stack traces included
+- **Production**: Generic error messages for 500 errors, no stack traces
+
 ## Current Implementation Status
 
 ### ✅ Completed Features
@@ -298,15 +478,25 @@ curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
   - Database migrations for users and gratitudes
   - Tag array support for gratitudes
 
+- **Error Handling**:
+  - Comprehensive global error handler middleware
+  - Custom error classes (ValidationError, AuthenticationError, NotFoundError, ConflictError, etc.)
+  - Automatic Zod validation error transformation
+  - Prisma error detection and user-friendly messages
+  - JWT error handling (expired, invalid, missing tokens)
+  - Environment-aware error responses (stack traces in development only)
+  - Consistent JSON error format across all endpoints
+  - Appropriate HTTP status codes (400, 401, 403, 404, 409, 500)
+
 ### ⚠️ Known Limitations
 
-1. **Error Handler Incomplete**: `src/middleware/errorHandler.ts` doesn't send response (needs implementation)
-2. **No Token Refresh**: JWT tokens expire after 1 day with no refresh mechanism
-3. **CORS Wide Open**: Currently allows all origins (development mode only)
-4. **No Rate Limiting**: API endpoints are not rate-limited
-5. **No Request Logging**: Missing request/response logging middleware
-6. **No Password Reset**: Missing password reset functionality
-7. **No Email Verification**: Users can register without email verification
+1. **No Token Refresh**: JWT tokens expire after 1 day with no refresh mechanism
+2. **CORS Wide Open**: Currently allows all origins (development mode only)
+3. **No Rate Limiting**: API endpoints are not rate-limited
+4. **No Request Logging**: Missing request/response logging middleware
+5. **No Password Reset**: Missing password reset functionality
+6. **No Email Verification**: Users can register without email verification
+7. **Gratitude Title Uniqueness**: Title field has global unique constraint (should be per-user)
 
 ### 🔮 Future Enhancements
 
@@ -314,11 +504,12 @@ curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
 - Password reset functionality
 - Email verification
 - Rate limiting
-- Request logging (Morgan or Winston)
+- Structured request logging (Morgan or Winston)
 - API documentation (Swagger/OpenAPI)
 - Unit and integration tests
 - CI/CD pipeline
 - Environment-based CORS configuration
+- Error monitoring service integration (Sentry, Rollbar)
 
 ## Security Features
 
@@ -339,12 +530,21 @@ curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
 - **Username Rules**: 3-20 characters, alphanumeric + underscore only
 - **Email Validation**: Proper email format required
 
+### Error Handling
+- **Centralized Error Handler**: All errors flow through global middleware
+- **Type-Safe Error Classes**: Custom error hierarchy with proper HTTP status codes
+- **Secure Error Messages**: Generic messages in production, detailed in development
+- **No Sensitive Data Leaks**: Stack traces and internal details hidden in production
+- **Consistent Error Format**: Standardized JSON responses for all error types
+
 ### Best Practices
 - Passwords never stored in plain text
 - JWT secrets stored in environment variables
 - User IDs embedded in tokens (no user lookup on every request)
 - Unique constraints on username and email
 - TypeScript for type safety
+- Environment-aware error responses
+- Proper HTTP status code usage
 
 ## Integration with Frontend
 
@@ -432,15 +632,24 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [x] Filter gratitudes by authenticated user
 - [x] Add user context to controllers
 
-### 🚧 Phase 3: Frontend Integration (Current)
-- [ ] Complete error handler middleware
+### ✅ Phase 3: Error Handling
+- [x] Create custom error classes hierarchy
+- [x] Implement global error handler middleware
+- [x] Transform Zod validation errors
+- [x] Transform Prisma database errors
+- [x] Handle JWT authentication errors
+- [x] Consistent error response format
+- [x] Environment-aware error responses
+
+### 🚧 Phase 4: Frontend Integration (Current)
 - [ ] Build Login/Register UI in frontend
 - [ ] Implement token management in frontend
 - [ ] Wire up frontend authentication context
 - [ ] Connect frontend CRUD operations to backend
-- [ ] Handle authentication errors gracefully
+- [ ] Handle authentication errors gracefully in UI
+- [ ] Display validation errors on forms
 
-### 📋 Phase 4: Production Readiness
+### 📋 Phase 5: Production Readiness
 - [ ] Implement refresh token rotation
 - [ ] Add password reset functionality
 - [ ] Add email verification
@@ -450,7 +659,7 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [ ] Add health check endpoint
 - [ ] Set up database connection pooling
 
-### 🧪 Phase 5: Testing & Quality
+### 🧪 Phase 6: Testing & Quality
 - [ ] Write unit tests for services (Jest/Vitest)
 - [ ] Write integration tests for routes (Supertest)
 - [ ] Add API documentation (Swagger/OpenAPI)
@@ -495,6 +704,6 @@ Private project - All rights reserved
 
 ---
 
-**Last Updated:** 2026-02-15
-**Status:** Backend Complete - Frontend Integration in Progress
-**Version:** 1.0.0 (Backend Ready)
+**Last Updated:** 2026-02-16
+**Status:** Backend Complete with Error Handling - Frontend Integration in Progress
+**Version:** 1.1.0 (Error Handling Complete)
