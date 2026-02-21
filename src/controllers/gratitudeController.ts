@@ -6,7 +6,7 @@ import {
   updateGratitudeSvc,
   deleteGratitudeSvc,
 } from "#services/gratitudeServices.js";
-import { AuthenticatedRequest } from "../middleware/auth";
+import { AuthenticatedRequest } from "../middleware/auth.js";
 
 export const createGratitude = async (
   req: AuthenticatedRequest,
@@ -14,7 +14,7 @@ export const createGratitude = async (
   next: NextFunction,
 ) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const { title, details, tags } = req.body;
     const data = { userId, ...req.body };
     const response = await createGratitudeSvc(data);
@@ -29,7 +29,7 @@ export const getAllGratitudes = async (
   next: NextFunction,
 ) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const response = await readAllGratitudesSvc(userId);
     return res.json(response);
   } catch (error) {
@@ -43,7 +43,7 @@ export const getSingleGratitude = async (
 ) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user!.id;
 
     const response = await readOneGratitudeSvc(userId, id);
     return res.json(response);
@@ -59,7 +59,7 @@ export const updateGratitude = async (
 ) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id
+    const userId = req.user!.id
     const data = req.body;
     const response = await updateGratitudeSvc(userId, id, data);
     return res.json(response);
@@ -74,7 +74,7 @@ export const deleteGratitude = async (
 ) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user!.id;
     const response = await deleteGratitudeSvc(userId, id);
     return res.json(response);
   } catch (error) {

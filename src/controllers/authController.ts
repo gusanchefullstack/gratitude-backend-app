@@ -1,8 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import bcrypt from "bcrypt";
-import { generateToken } from "../utils/jwt";
-import { hashPasswords, comparePasswords } from "../utils/passwords";
-import { registerUser, login } from "../services/authServices";
+import { generateToken } from "../utils/jwt.js";
+import { hashPasswords, comparePasswords } from "../utils/passwords.js";
+import { registerUser, login } from "../services/authServices.js";
 import { AuthenticationError } from "../utils/errors.js";
 
 export const loginUser = async (

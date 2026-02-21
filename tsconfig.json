@@ -3,12 +3,11 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./",
-    "module": "ESNext",
-    "moduleResolution": "node",
+    "module": "Node16",
+    "moduleResolution": "node16",
     "target": "es2023",
     "strict": true,
-    "esModuleInterop": true,
-    "ignoreDeprecations": "6.0"
+    "esModuleInterop": true
   },
   "include": ["**/*.ts"],
   "exclude": ["dist"]

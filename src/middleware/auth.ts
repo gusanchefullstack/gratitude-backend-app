@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyToken, type JwtPayload } from "../utils/jwt";
+import { verifyToken, type JwtPayload } from "../utils/jwt.js";
 import { AuthenticationError } from "../utils/errors.js";
 
 export interface AuthenticatedRequest extends Request {
@@ -16,7 +16,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
         }
 
         const payload = await verifyToken(token)
-        req.user = payload;
+        ;(req as AuthenticatedRequest).user = payload;
         next()
     } catch (error) {
         // If it's already our custom error, pass it through

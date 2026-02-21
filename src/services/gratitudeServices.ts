@@ -1,7 +1,7 @@
-import { prisma } from "../../lib/prisma";
-import { Prisma } from "../../generated/prisma/client";
+import { prisma } from "../../lib/prisma.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { ConflictError, NotFoundError, DatabaseError } from "../utils/errors.js";
-export const createGratitudeSvc = async (data) => {
+export const createGratitudeSvc = async (data: Prisma.GratitudeUncheckedCreateInput) => {
   try {
       const listIfGratitude = await prisma.gratitude.create({
         data
@@ -90,7 +90,7 @@ export const readOneGratitudeSvc = async (userId:string, id: string) => {
 };
 
 
-export const updateGratitudeSvc = async (userId: string, id: string, data) => {
+export const updateGratitudeSvc = async (userId: string, id: string, data: Prisma.GratitudeUncheckedUpdateInput) => {
   try {
     const listOfGratitude = await prisma.gratitude.update({where:{userId, id}, data:{...data}})
     return {

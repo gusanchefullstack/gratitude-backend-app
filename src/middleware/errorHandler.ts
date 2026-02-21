@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { Prisma } from "../../generated/prisma/client.js";
+import { config } from "#config/env.js";
 import {
   AppError,
   ValidationError,
@@ -48,7 +49,7 @@ export const errorHandler = (
   // Handle generic errors
   else {
     finalError = new AppError(
-      process.env.NODE_ENV === "production"
+      config.NODE_ENV === "production"
         ? "Internal server error"
         : error.message || "Internal server error",
       500,
@@ -87,7 +88,7 @@ export const errorHandler = (
     errorResponse.details = finalError.details;
   }
   // Include stack trace only in development mode
-  if (process.env.NODE_ENV === "development") {
+  if (config.NODE_ENV === "development") {
     errorResponse.stack = error.stack;
   }
 
@@ -133,7 +134,7 @@ function handlePrismaError(error: Prisma.PrismaClientKnownRequestError): AppErro
     // Default: generic database error
     default: {
       return new DatabaseError(
-        process.env.NODE_ENV === "production"
+        config.NODE_ENV === "production"
           ? "Database operation failed"
           : error.message,
         error.code

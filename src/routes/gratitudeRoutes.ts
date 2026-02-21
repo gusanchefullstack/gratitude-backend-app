@@ -5,13 +5,13 @@ import {
   getSingleGratitude,
   updateGratitude,
   deleteGratitude,
-} from "../controllers/gratitudeController";
+} from "../controllers/gratitudeController.js";
 import {
   createGratitudeBodySchema,
   updateGratitudeBodySchema,
   gratitudeParamsSchema,
-} from "../schemas/gratitude.schema";
-import { validateParams, validateBody } from "../middleware/validation";
+} from "../schemas/gratitude.schema.js";
+import { validateParams, validateBody } from "../middleware/validation.js";
 
 
 const gratitudesRouter = Router();

@@ -21,9 +21,11 @@ This is the backend service for the Gratitude App, a fullstack application that 
 ```
 src/
 ├── index.ts                          # Express app entry point
+├── config/
+│   └── env.ts                        # Centralized env config with Zod validation
 ├── controllers/
-│   ├── gratitudeController.ts        # CRUD handlers for gratitudes ✅
-│   └── authController.ts             # Authentication handlers ✅
+│   ├── gratitudeController.ts        # CRUD handlers for gratitudes
+│   └── authController.ts             # Authentication handlers
 ├── routes/
 │   ├── index.ts                      # Main router /api/v1 setup
 │   ├── gratitudeRoutes.ts            # Gratitude CRUD routes (protected)
@@ -34,7 +36,7 @@ src/
 ├── middleware/
 │   ├── auth.ts                       # JWT authentication middleware
 │   ├── validation.ts                 # Zod schema validation middleware
-│   └── errorHandler.ts               # Error handling middleware
+│   └── errorHandler.ts               # Global error handling middleware
 ├── schemas/
 │   ├── gratitude.schema.ts           # Gratitude validation schemas
 │   ├── user.schema.ts                # User validation schemas
@@ -42,7 +44,7 @@ src/
 └── utils/
     ├── jwt.ts                        # JWT token generation & verification
     ├── passwords.ts                  # bcrypt password hashing
-    └── errors.ts                     # Custom error classes ✅
+    └── errors.ts                     # Custom error classes
 
 lib/
 └── prisma.ts                         # Prisma client initialization
@@ -51,6 +53,20 @@ prisma/
 ├── schema.prisma                     # Database schema
 └── migrations/                       # Database migrations
 ```
+
+### Path Aliases
+
+All internal imports use Node.js subpath imports (defined in `package.json`) for clean, refactor-friendly paths:
+
+| Alias | Resolves to |
+|-------|-------------|
+| `#config/env.js` | `src/config/env.ts` |
+| `#controllers/*.js` | `src/controllers/*.ts` |
+| `#routes/*.js` | `src/routes/*.ts` |
+| `#middleware/*.js` | `src/middleware/*.ts` |
+| `#services/*.js` | `src/services/*.ts` |
+| `#schemas/*.js` | `src/schemas/*.ts` |
+| `#utils/*.js` | `src/utils/*.ts` |
 
 ## Database Schema
 
@@ -136,15 +152,21 @@ All gratitude endpoints require JWT authentication via `Authorization: Bearer <t
 
 3. Set up environment variables:
    ```bash
-   cp .env.example .env
+   cp .env.example .env.development   # for local dev
+   cp .env.example .env.production    # for production
    ```
 
-   Configure the following variables in `.env`:
-   ```
-   PORT=3000
-   DATABASE_URL="postgresql://username:password@localhost:5432/gratitude_db"
-   JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
-   ```
+   Configure the following variables in each file:
+
+   | Variable | Description | Example |
+   |----------|-------------|---------|
+   | `NODE_ENV` | Runtime environment | `development` |
+   | `PORT` | Server port | `3000` |
+   | `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@host:5432/db` |
+   | `JWT_SECRET` | HS256 signing secret (min 16 chars) | `change-me-use-a-strong-random-secret` |
+   | `BCRYPT_ROUNDS` | bcrypt cost factor (8–20) | `10` |
+
+   > **Note:** All environment variables are validated at startup via Zod (`src/config/env.ts`). The server will fail fast with a clear error message if any required variable is missing or invalid.
 
 4. Run database migrations:
    ```bash
@@ -453,8 +475,8 @@ The error handling system uses a **centralized global error handler** with custo
 ### ✅ Completed Features
 
 - **Authentication & Authorization**:
-  - User registration with password hashing (bcrypt, 10 salt rounds)
-  - User login with JWT token generation (1-day expiration)
+  - User registration with password hashing (bcrypt, configurable rounds via `BCRYPT_ROUNDS`)
+  - User login with JWT token generation (1-day expiration, HS256)
   - JWT authentication middleware (`authenticateToken`)
   - Protected routes with Bearer token verification
   - User model in Prisma schema with relationships
@@ -471,10 +493,17 @@ The error handling system uses a **centralized global error handler** with custo
   - Username validation (3-20 chars, alphanumeric + underscore)
   - Email validation
 
+- **Environment Configuration**:
+  - Centralized `src/config/env.ts` — Zod-validated config parsed once at startup
+  - Fail-fast on missing/invalid environment variables with descriptive messages
+  - Per-environment env files (`.env.development`, `.env.production`)
+  - `BCRYPT_ROUNDS` configurable (8–20), defaults to `10`
+  - Node.js subpath import aliases (`#config/*`, `#routes/*`, etc.) for clean imports
+
 - **Infrastructure**:
   - Express middleware setup (CORS, JSON parsing)
   - Prisma ORM integration with PostgreSQL
-  - TypeScript configuration with strict mode
+  - TypeScript strict mode, `module: "Node16"`, `moduleResolution: "node16"`, `target: "ES2023"`
   - Database migrations for users and gratitudes
   - Tag array support for gratitudes
 
@@ -641,7 +670,15 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [x] Consistent error response format
 - [x] Environment-aware error responses
 
-### 🚧 Phase 4: Frontend Integration (Current)
+### ✅ Phase 4: Project Infrastructure & Config
+- [x] Centralized environment config module with Zod validation (`src/config/env.ts`)
+- [x] Per-environment env files (`.env.development`, `.env.production`)
+- [x] Node.js subpath import aliases (`#*` → `./src/*`)
+- [x] TypeScript updated to `Node16` modules + `ES2023` target
+- [x] `BCRYPT_ROUNDS` externalized to environment config
+- [x] `.env.example` fully documented with all required variables
+
+### 🚧 Phase 5: Frontend Integration (Current)
 - [ ] Build Login/Register UI in frontend
 - [ ] Implement token management in frontend
 - [ ] Wire up frontend authentication context
@@ -649,7 +686,7 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [ ] Handle authentication errors gracefully in UI
 - [ ] Display validation errors on forms
 
-### 📋 Phase 5: Production Readiness
+### 📋 Phase 7: Production Readiness
 - [ ] Implement refresh token rotation
 - [ ] Add password reset functionality
 - [ ] Add email verification
@@ -659,7 +696,7 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [ ] Add health check endpoint
 - [ ] Set up database connection pooling
 
-### 🧪 Phase 6: Testing & Quality
+### 🧪 Phase 8: Testing & Quality
 - [ ] Write unit tests for services (Jest/Vitest)
 - [ ] Write integration tests for routes (Supertest)
 - [ ] Add API documentation (Swagger/OpenAPI)
@@ -672,12 +709,16 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 
 ```json
 {
-  "dev": "tsx --watch --env-file .env src/index.ts",
-  "start": "node --env-file .env dist/index.js",
+  "dev": "tsx --watch --env-file .env.development src/index.ts",
+  "start": "node --env-file .env.production dist/index.js",
   "build": "tsc",
-  "test": "echo 'Error: no test specified' && exit 1"
+  "test": "echo \"Error: no test specified\" && exit 1"
 }
 ```
+
+- `dev` — runs the server in watch mode, loading `.env.development`
+- `start` — runs the compiled output, loading `.env.production`
+- `build` — compiles TypeScript to `dist/` via `tsc`
 
 ## Contributing
 
@@ -691,11 +732,11 @@ This is a personal project. For changes:
 ## Recent Git History
 
 ```
+c52fcf0 Refactor project structure and add environment config module
+f71d823 Implement comprehensive error handling system
+8dc03a3 Update README.md with comprehensive project analysis
 6f0cc6b Add authentication and authorization to CRUD routes
 5c3c309 Add schema validation for user and gratitude routes
-76b7f70 Add route for register user and create user model in prisma
-39d236e Add preliminary README.md, begin implementation of jwt authentication
-a089a0f Add CRUD services for gratitude
 ```
 
 ## License
@@ -704,6 +745,6 @@ Private project - All rights reserved
 
 ---
 
-**Last Updated:** 2026-02-16
-**Status:** Backend Complete with Error Handling - Frontend Integration in Progress
-**Version:** 1.1.0 (Error Handling Complete)
+**Last Updated:** 2026-02-20
+**Status:** Backend Complete — Frontend Integration in Progress
+**Version:** 1.2.0 (Environment Config & Path Aliases)

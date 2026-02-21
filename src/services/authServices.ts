@@ -1,7 +1,7 @@
-import { Prisma } from "../../generated/prisma/client";
-import { prisma } from "../../lib/prisma";
-import { comparePasswords, hashPasswords } from "../utils/passwords";
-import { generateToken } from "../utils/jwt";
+import { Prisma } from "../../generated/prisma/client.js";
+import { prisma } from "../../lib/prisma.js";
+import { comparePasswords, hashPasswords } from "../utils/passwords.js";
+import { generateToken } from "../utils/jwt.js";
 import { ConflictError, DatabaseError } from "../utils/errors.js";
 
 export const registerUser = async (user: Prisma.UserCreateInput) => {
