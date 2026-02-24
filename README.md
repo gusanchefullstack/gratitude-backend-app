@@ -14,6 +14,7 @@ This is the backend service for the Gratitude App, a fullstack application that 
 - **Database:** PostgreSQL
 - **ORM:** Prisma 7.2.0 with @prisma/adapter-pg
 - **Authentication:** JWT (jose library v6.1.3) + bcrypt for password hashing
+- **Rate Limiting:** express-rate-limit 8.2.1 + express-slow-down 3.0.1
 - **Dev Tools:** tsx (watch mode), TypeScript compiler
 
 ## Project Structure
@@ -36,7 +37,8 @@ src/
 ├── middleware/
 │   ├── auth.ts                       # JWT authentication middleware
 │   ├── validation.ts                 # Zod schema validation middleware
-│   └── errorHandler.ts               # Global error handling middleware
+│   ├── errorHandler.ts               # Global error handling middleware
+│   └── rateLimit.ts                  # Rate limiting & speed limiting middleware
 ├── schemas/
 │   ├── gratitude.schema.ts           # Gratitude validation schemas
 │   ├── user.schema.ts                # User validation schemas
@@ -58,15 +60,28 @@ prisma/
 
 All internal imports use Node.js subpath imports (defined in `package.json`) for clean, refactor-friendly paths:
 
-| Alias | Resolves to |
-|-------|-------------|
-| `#config/env.js` | `src/config/env.ts` |
-| `#controllers/*.js` | `src/controllers/*.ts` |
-| `#routes/*.js` | `src/routes/*.ts` |
-| `#middleware/*.js` | `src/middleware/*.ts` |
-| `#services/*.js` | `src/services/*.ts` |
-| `#schemas/*.js` | `src/schemas/*.ts` |
-| `#utils/*.js` | `src/utils/*.ts` |
+| Alias | Dev resolves to | Prod resolves to |
+|-------|-----------------|------------------|
+| `#config/env.js` | `src/config/env.ts` | `dist/src/config/env.js` |
+| `#controllers/*.js` | `src/controllers/*.ts` | `dist/src/controllers/*.js` |
+| `#routes/*.js` | `src/routes/*.ts` | `dist/src/routes/*.js` |
+| `#middleware/*.js` | `src/middleware/*.ts` | `dist/src/middleware/*.js` |
+| `#services/*.js` | `src/services/*.ts` | `dist/src/services/*.js` |
+| `#schemas/*.js` | `src/schemas/*.ts` | `dist/src/schemas/*.js` |
+| `#utils/*.js` | `src/utils/*.ts` | `dist/src/utils/*.js` |
+
+The `package.json` uses [Node.js conditional exports](https://nodejs.org/api/packages.html#conditional-exports) with a single wildcard pattern:
+
+```json
+"imports": {
+  "#*": {
+    "development": "./src/*",
+    "default": "./dist/src/*"
+  }
+}
+```
+
+The `dev` script sets `NODE_OPTIONS='--conditions=development'` so the `development` condition resolves at dev time. In production (`npm start`), the `default` condition points to the compiled output.
 
 ## Database Schema
 
@@ -158,13 +173,13 @@ All gratitude endpoints require JWT authentication via `Authorization: Bearer <t
 
    Configure the following variables in each file:
 
-   | Variable | Description | Example |
-   |----------|-------------|---------|
-   | `NODE_ENV` | Runtime environment | `development` |
-   | `PORT` | Server port | `3000` |
-   | `DATABASE_URL` | PostgreSQL connection string | `postgres://user:pass@host:5432/db` |
-   | `JWT_SECRET` | HS256 signing secret (min 16 chars) | `change-me-use-a-strong-random-secret` |
-   | `BCRYPT_ROUNDS` | bcrypt cost factor (8–20) | `10` |
+   | Variable | Description | Default | Required |
+   |----------|-------------|---------|----------|
+   | `NODE_ENV` | Runtime environment (`development`/`production`/`test`) | `development` | No |
+   | `PORT` | Server port | `3000` | No |
+   | `DATABASE_URL` | PostgreSQL connection string | — | **Yes** |
+   | `JWT_SECRET` | HS256 signing secret (min 16 chars) | — | **Yes** |
+   | `BCRYPT_ROUNDS` | bcrypt cost factor (8–20) | `10` | No |
 
    > **Note:** All environment variables are validated at startup via Zod (`src/config/env.ts`). The server will fail fast with a clear error message if any required variable is missing or invalid.
 
@@ -486,6 +501,10 @@ The error handling system uses a **centralized global error handler** with custo
   - User-scoped data access (users can only access their own gratitudes)
   - User-gratitude relationship enforced at database level
 
+- **Rate Limiting** (applied to all `/api/v1/*` routes):
+  - **Hard limit** (`express-rate-limit`): max 5 requests per IP per 15-minute window; returns 429 with JSON error on breach
+  - **Speed limiter** (`express-slow-down`): progressive delay starting after 3 requests in a 15-minute window (+2 s per excess request)
+
 - **Validation**:
   - Zod schemas for request validation
   - Validation middleware for body, params, and query
@@ -521,7 +540,7 @@ The error handling system uses a **centralized global error handler** with custo
 
 1. **No Token Refresh**: JWT tokens expire after 1 day with no refresh mechanism
 2. **CORS Wide Open**: Currently allows all origins (development mode only)
-3. **No Rate Limiting**: API endpoints are not rate-limited
+3. **Aggressive Rate Limit**: 5 req / 15 min is very restrictive — tune before production
 4. **No Request Logging**: Missing request/response logging middleware
 5. **No Password Reset**: Missing password reset functionality
 6. **No Email Verification**: Users can register without email verification
@@ -532,13 +551,13 @@ The error handling system uses a **centralized global error handler** with custo
 - Token refresh mechanism
 - Password reset functionality
 - Email verification
-- Rate limiting
 - Structured request logging (Morgan or Winston)
 - API documentation (Swagger/OpenAPI)
 - Unit and integration tests
 - CI/CD pipeline
 - Environment-based CORS configuration
 - Error monitoring service integration (Sentry, Rollbar)
+- Tune rate limit thresholds per route (e.g. stricter on auth endpoints)
 
 ## Security Features
 
@@ -565,6 +584,11 @@ The error handling system uses a **centralized global error handler** with custo
 - **Secure Error Messages**: Generic messages in production, detailed in development
 - **No Sensitive Data Leaks**: Stack traces and internal details hidden in production
 - **Consistent Error Format**: Standardized JSON responses for all error types
+
+### Rate Limiting
+- **Hard cap** (express-rate-limit): 5 requests / IP / 15 min — returns `429 Too Many Requests` with JSON message on breach
+- **Progressive slowdown** (express-slow-down): delays start after the 3rd request in a 15-minute window, adding +2 s per extra request
+- Both limiters are applied globally to all `/api/v1/*` routes
 
 ### Best Practices
 - Passwords never stored in plain text
@@ -686,11 +710,21 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 - [ ] Handle authentication errors gracefully in UI
 - [ ] Display validation errors on forms
 
+### ✅ Phase 5.5: Rate Limiting & Deployment Fixes
+- [x] Add `express-rate-limit` (5 req / 15 min hard cap, JSON error response)
+- [x] Add `express-slow-down` (progressive delay after 3 req / 15 min)
+- [x] Apply both limiters to all `/api/v1/*` routes
+- [x] Fix Node.js conditional path exports (`development` vs `default`)
+- [x] Fix production dist path (`dist/src/index.js`)
+- [x] Remove `--env-file` from production start script (env managed externally)
+- [x] Remove `PORT` from `.env.example` (defaults to `3000` via Zod schema)
+- [x] Fully document `.env.example` with all required variables
+
 ### 📋 Phase 7: Production Readiness
 - [ ] Implement refresh token rotation
 - [ ] Add password reset functionality
 - [ ] Add email verification
-- [ ] Implement rate limiting (express-rate-limit)
+- [ ] Tune rate limits per route (stricter on `/auth/*`)
 - [ ] Add request logging (Morgan/Winston)
 - [ ] Environment-based CORS configuration
 - [ ] Add health check endpoint
@@ -709,15 +743,15 @@ const response = await fetch(`${API_BASE_URL}/gratitudes`, {
 
 ```json
 {
-  "dev": "tsx --watch --env-file .env.development src/index.ts",
-  "start": "node --env-file .env.production dist/index.js",
+  "dev": "NODE_OPTIONS='--conditions=development' tsx --watch --env-file .env.development src/index.ts",
+  "start": "node dist/src/index.js",
   "build": "tsc",
   "test": "echo \"Error: no test specified\" && exit 1"
 }
 ```
 
-- `dev` — runs the server in watch mode, loading `.env.development`
-- `start` — runs the compiled output, loading `.env.production`
+- `dev` — sets `NODE_OPTIONS='--conditions=development'` to activate dev path aliases, runs in watch mode loading `.env.development`
+- `start` — runs the compiled output from `dist/src/index.js`; production env variables must be supplied externally (not via `--env-file`)
 - `build` — compiles TypeScript to `dist/` via `tsc`
 
 ## Contributing
@@ -732,11 +766,13 @@ This is a personal project. For changes:
 ## Recent Git History
 
 ```
-c52fcf0 Refactor project structure and add environment config module
+f8f7e7b Fix module path resolution for production deployment
+98b905f Remove --env-file flag from production start script
+092fb98 Fix start script to point to correct dist output path
+ecb365b Remove PORT from .env.example
+92ce6ad Refactor project structure and add environment config module
 f71d823 Implement comprehensive error handling system
 8dc03a3 Update README.md with comprehensive project analysis
-6f0cc6b Add authentication and authorization to CRUD routes
-5c3c309 Add schema validation for user and gratitude routes
 ```
 
 ## License
@@ -745,6 +781,6 @@ Private project - All rights reserved
 
 ---
 
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-23
 **Status:** Backend Complete — Frontend Integration in Progress
-**Version:** 1.2.0 (Environment Config & Path Aliases)
+**Version:** 1.3.0 (Rate Limiting & Deployment Fixes)
