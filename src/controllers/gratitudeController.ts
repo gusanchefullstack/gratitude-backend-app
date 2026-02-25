@@ -18,7 +18,7 @@ export const createGratitude = async (
     const { title, details, tags } = req.body;
     const data = { userId, ...req.body };
     const response = await createGratitudeSvc(data);
-    return res.json(response);
+    return res.status(201).json(response);
   } catch (error) {
     next(error);
   }

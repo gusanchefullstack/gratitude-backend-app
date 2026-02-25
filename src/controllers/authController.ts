@@ -17,7 +17,7 @@ export const loginUser = async (
       throw new AuthenticationError("Invalid username or password");
     }
 
-    return res.status(201).json({
+    return res.status(200).json({
       message: "Login success",
       user: data.validatedUser,
       token: data.token
