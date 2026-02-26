@@ -5,17 +5,17 @@ const gratitudeBaseSchema = z.object({
   title: z
     .string()
     .min(3, { error: "Title must have at least 3 characters" })
-    .max(100, { error: "Title cannot exceed 100 characters" }),
+    .max(70, { error: "Title cannot exceed 70 characters" }),
   details: z
     .string()
     .min(10, { error: "Details must have at least 10 characters" })
-    .max(200, { error: "Details cannot exceed 200 characters" }),
+    .max(140, { error: "Details cannot exceed 140 characters" }),
   tags: z
     .array(
       z
         .string()
         .min(3, { error: "Tag must have at least 3 characters" })
-        .max(20, { error: "Tag cannot exceed 20 characters" }),
+        .max(15, { error: "Tag cannot exceed 15 characters" }),
     )
     .max(5),
 });
