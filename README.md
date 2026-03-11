@@ -1,786 +1,214 @@
-# Gratitude App - Backend API
+# Gratitude App Backend API
 
-A RESTful API for managing gratitude entries with full JWT authentication, built with Express.js, TypeScript, and PostgreSQL.
+Backend service for the Gratitude App. It provides authentication, user profile management, gratitude CRUD, dashboard summary metrics, and mantra-of-the-day content.
 
-## Overview
+## Stack
 
-This is the backend service for the Gratitude App, a fullstack application that helps users record and manage their daily gratitudes. The backend provides a complete CRUD API for gratitude entries with user authentication, authorization, and data isolation.
+- Node.js + Express 5
+- TypeScript
+- PostgreSQL
+- Prisma ORM
+- Zod validation
+- JWT (access + refresh)
+- bcrypt password hashing
+- Vitest + Supertest tests
 
-## Tech Stack
+## Codebase Analysis
 
-- **Runtime:** Node.js v22
-- **Language:** TypeScript 5.9.3
-- **Framework:** Express.js 5.2.1
-- **Database:** PostgreSQL
-- **ORM:** Prisma 7.2.0 with @prisma/adapter-pg
-- **Authentication:** JWT (jose library v6.1.3) + bcrypt for password hashing
-- **Rate Limiting:** express-rate-limit 8.2.1 + express-slow-down 3.0.1
-- **Dev Tools:** tsx (watch mode), TypeScript compiler
+## Architecture
+
+The backend follows a layered structure:
+
+- `routes` define endpoint paths and middleware chains.
+- `controllers` handle request/response orchestration.
+- `services` implement business logic and DB operations.
+- `schemas` define request contracts using Zod.
+- `middleware` centralizes auth, validation, rate limiting, observability, and error handling.
+- `utils` includes JWT, password, and custom error helpers.
+
+Flow pattern:
+
+1. Route receives request
+2. Validation middleware parses and sanitizes input
+3. Auth middleware injects user context on protected routes
+4. Controller delegates to service
+5. Service performs Prisma operations
+6. Global error handler formats consistent JSON errors
+
+## Security and Reliability Highlights
+
+- Access token + refresh token flow with session persistence in `refresh_sessions`
+- Logout and refresh-session revocation support
+- Auth endpoints have stricter rate limits than global API routes
+- Environment-aware CORS allowlist (`FRONTEND_ORIGINS`)
+- Helmet security headers
+- Request ID + request logging for tracing
+- Global error mapping for Zod/Prisma/JWT errors
+- Transactional registration to avoid partial user creation
+
+## Validation Rules Highlights
+
+User payload validation:
+
+- `username`: 3-20 chars, trimmed/lowercased, alphanumeric + underscore
+- `email`: trimmed, valid email format, lowercased
+- `password`: 8-50 chars, must include uppercase, lowercase, number, special char
+- `firstName` and `lastName`: required, trimmed, max 50 chars
+
+Gratitude payload validation:
+
+- `title`: 3-70 chars
+- `details`: 10-140 chars
+- `tags`: max 5 tags, each tag 3-15 chars
+
+## Data Model
+
+Defined in `prisma/schema.prisma`:
+
+- `User` -> mapped to table `users`
+- `Gratitude` -> mapped to table `gratitudes`
+- `RefreshSession` -> mapped to table `refresh_sessions`
+
+Notes:
+
+- `Gratitude.title` is currently globally unique (not per-user).
+- Refresh sessions are hashed in DB (`tokenHash`) and can be revoked.
 
 ## Project Structure
 
-```
+```text
 src/
-├── index.ts                          # Express app entry point
-├── config/
-│   └── env.ts                        # Centralized env config with Zod validation
-├── controllers/
-│   ├── gratitudeController.ts        # CRUD handlers for gratitudes
-│   └── authController.ts             # Authentication handlers
-├── routes/
-│   ├── index.ts                      # Main router /api/v1 setup
-│   ├── gratitudeRoutes.ts            # Gratitude CRUD routes (protected)
-│   └── authRoutes.ts                 # Auth routes (register/login)
-├── services/
-│   ├── gratitudeServices.ts          # Prisma database operations
-│   └── authServices.ts               # User registration & login logic
-├── middleware/
-│   ├── auth.ts                       # JWT authentication middleware
-│   ├── validation.ts                 # Zod schema validation middleware
-│   ├── errorHandler.ts               # Global error handling middleware
-│   └── rateLimit.ts                  # Rate limiting & speed limiting middleware
-├── schemas/
-│   ├── gratitude.schema.ts           # Gratitude validation schemas
-│   ├── user.schema.ts                # User validation schemas
-│   └── common.schema.ts              # Shared schemas (UUID, password)
-└── utils/
-    ├── jwt.ts                        # JWT token generation & verification
-    ├── passwords.ts                  # bcrypt password hashing
-    └── errors.ts                     # Custom error classes
-
-lib/
-└── prisma.ts                         # Prisma client initialization
-
+  config/
+  controllers/
+  middleware/
+  routes/
+  schemas/
+  services/
+  utils/
 prisma/
-├── schema.prisma                     # Database schema
-└── migrations/                       # Database migrations
+  schema.prisma
+  migrations/
+tests/
+  integration/
+  services/
 ```
 
-### Path Aliases
+## API Base URL
 
-All internal imports use Node.js subpath imports (defined in `package.json`) for clean, refactor-friendly paths:
+- `/api/v1`
 
-| Alias | Dev resolves to | Prod resolves to |
-|-------|-----------------|------------------|
-| `#config/env.js` | `src/config/env.ts` | `dist/src/config/env.js` |
-| `#controllers/*.js` | `src/controllers/*.ts` | `dist/src/controllers/*.js` |
-| `#routes/*.js` | `src/routes/*.ts` | `dist/src/routes/*.js` |
-| `#middleware/*.js` | `src/middleware/*.ts` | `dist/src/middleware/*.js` |
-| `#services/*.js` | `src/services/*.ts` | `dist/src/services/*.js` |
-| `#schemas/*.js` | `src/schemas/*.ts` | `dist/src/schemas/*.js` |
-| `#utils/*.js` | `src/utils/*.ts` | `dist/src/utils/*.js` |
+## Health Endpoint
 
-The `package.json` uses [Node.js conditional exports](https://nodejs.org/api/packages.html#conditional-exports) with a single wildcard pattern:
+- `GET /health`
 
-```json
-"imports": {
-  "#*": {
-    "development": "./src/*",
-    "default": "./dist/src/*"
-  }
-}
-```
+Returns service status, uptime, and timestamp.
 
-The `dev` script sets `NODE_OPTIONS='--conditions=development'` so the `development` condition resolves at dev time. In production (`npm start`), the `default` condition points to the compiled output.
+## Available Endpoints
 
-## Database Schema
+## Auth (Public)
 
-### User Model
+- `POST /api/v1/auth/register`
+  - Body: `username`, `email`, `password`, `firstName`, `lastName`
+  - Returns: `user`, `token`, `refreshToken`
+- `POST /api/v1/auth/login`
+  - Body: `username`, `password`
+  - Returns: `user`, `token`, `refreshToken`
+- `POST /api/v1/auth/refresh`
+  - Body: `refreshToken`
+  - Rotates refresh session and returns new token pair
+- `POST /api/v1/auth/logout`
+  - Body: `refreshToken`
+  - Revokes active refresh session
 
-```prisma
-model User {
-  id         String      @id @default(uuid())
-  username   String      @unique
-  password   String      # Hashed with bcrypt
-  firstName  String
-  lastName   String
-  email      String      @unique
-  gratitudes Gratitude[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+## Gratitudes (Protected)
 
-  @@map("users")
-}
-```
+Require `Authorization: Bearer <access_token>`.
 
-### Gratitude Model
+- `GET /api/v1/gratitudes`
+  - Query:
+    - `page` (default `1`)
+    - `limit` (default `10`, max `100`)
+    - `search` (title/details/tags)
+    - `tag`
+    - `sortBy` (`createdAt`, `updatedAt`, `title`)
+    - `order` (`asc`, `desc`)
+- `GET /api/v1/gratitudes/:id`
+- `POST /api/v1/gratitudes`
+  - Body: `title`, `details`, `tags`
+- `PATCH /api/v1/gratitudes/:id`
+  - Body: partial `title`, `details`, `tags`
+- `DELETE /api/v1/gratitudes/:id`
 
-```prisma
-model Gratitude {
-  id        String   @id @default(uuid())
-  title     String   @unique
-  details   String
-  tags      String[]
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+## Users (Protected)
 
-  @@map("gratitudes")
-}
-```
+- `GET /api/v1/users/me`
+- `PATCH /api/v1/users/me`
+  - Body: any of `username`, `email`, `firstName`, `lastName`
+- `PATCH /api/v1/users/me/password`
+  - Body: `currentPassword`, `newPassword`
 
-**Relationship**: One User can have many Gratitudes. Each Gratitude belongs to one User.
+## Dashboard (Protected)
 
-## API Endpoints
+- `GET /api/v1/dashboard/summary`
+  - Returns:
+    - `totalGratitudes`
+    - `currentStreak`
+    - `topTags`
+    - `recentGratitudes`
 
-### Authentication (Public)
+## Mantra (Public)
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/v1/auth/register` | Register new user | No |
-| POST | `/api/v1/auth/login` | User login | No |
+- `GET /api/v1/mantraoftheday`
+  - Returns daily deterministic mantra payload
 
-### Gratitudes (Protected 🔒)
+## Error Format
 
-All gratitude endpoints require JWT authentication via `Authorization: Bearer <token>` header.
+All API errors are normalized:
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/v1/gratitudes` | Get all user's gratitudes | Yes 🔒 |
-| GET | `/api/v1/gratitudes/:id` | Get single gratitude by ID | Yes 🔒 |
-| POST | `/api/v1/gratitudes` | Create new gratitude | Yes 🔒 |
-| PATCH | `/api/v1/gratitudes/:id` | Update gratitude | Yes 🔒 |
-| DELETE | `/api/v1/gratitudes/:id` | Delete gratitude | Yes 🔒 |
-
-**Note**: All gratitude operations are user-scoped. Users can only access, create, update, and delete their own gratitudes.
-
-## Setup Instructions
-
-### Prerequisites
-
-- Node.js v22 (use nvm: `nvm use`)
-- PostgreSQL database
-- npm or yarn package manager
-
-### Installation
-
-1. Clone the repository and navigate to the backend directory:
-   ```bash
-   cd gratitude-backend-app
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env.development   # for local dev
-   cp .env.example .env.production    # for production
-   ```
-
-   Configure the following variables in each file:
-
-   | Variable | Description | Default | Required |
-   |----------|-------------|---------|----------|
-   | `NODE_ENV` | Runtime environment (`development`/`production`/`test`) | `development` | No |
-   | `PORT` | Server port | `3000` | No |
-   | `DATABASE_URL` | PostgreSQL connection string | — | **Yes** |
-   | `JWT_SECRET` | HS256 signing secret (min 16 chars) | — | **Yes** |
-   | `BCRYPT_ROUNDS` | bcrypt cost factor (8–20) | `10` | No |
-
-   > **Note:** All environment variables are validated at startup via Zod (`src/config/env.ts`). The server will fail fast with a clear error message if any required variable is missing or invalid.
-
-4. Run database migrations:
-   ```bash
-   npx prisma migrate dev
-   ```
-
-5. Generate Prisma client:
-   ```bash
-   npx prisma generate
-   ```
-
-### Development
-
-Start the development server with hot reload:
-```bash
-npm run dev
-```
-
-The server will start on `http://localhost:3000`
-
-### Production
-
-Build and start the production server:
-```bash
-npm run build
-npm start
-```
-
-## API Usage Examples
-
-### Register a New User
-
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "johndoe",
-    "email": "john@example.com",
-    "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe"
-  }'
-```
-
-**Response:**
-```json
-{
-  "message": "User created",
-  "user": {
-    "id": "uuid-here",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### Login
-
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "johndoe",
-    "password": "SecurePass123!"
-  }'
-```
-
-**Response:**
-```json
-{
-  "message": "Login success",
-  "user": {
-    "id": "uuid-here",
-    "username": "johndoe",
-    "firstName": "John",
-    "lastName": "Doe",
-    "email": "john@example.com"
-  },
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-### Create a Gratitude (Protected)
-
-```bash
-curl -X POST http://localhost:3000/api/v1/gratitudes \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "title": "Beautiful sunrise",
-    "details": "Watched an amazing sunrise this morning",
-    "tags": ["nature", "morning", "peace"]
-  }'
-```
-
-### Get All Gratitudes (Protected)
-
-```bash
-curl http://localhost:3000/api/v1/gratitudes \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-### Update a Gratitude (Protected)
-
-```bash
-curl -X PATCH http://localhost:3000/api/v1/gratitudes/{id} \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "title": "Updated title",
-    "details": "Updated details"
-  }'
-```
-
-### Delete a Gratitude (Protected)
-
-```bash
-curl -X DELETE http://localhost:3000/api/v1/gratitudes/{id} \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
-
-## Error Handling
-
-The API implements comprehensive error handling with consistent JSON responses and appropriate HTTP status codes.
-
-### Error Response Format
-
-All errors follow this standardized format:
-
-```json
-{
-  "error": "Human-readable error message",
-  "code": "ERROR_CODE",
-  "details": [
-    {
-      "field": "fieldName",
-      "message": "Field-specific error message"
-    }
-  ],
-  "stack": "Error stack trace (development only)"
-}
-```
-
-### HTTP Status Codes
-
-| Status Code | Error Type | Description |
-|-------------|------------|-------------|
-| 400 | Bad Request | Validation errors, invalid input data |
-| 401 | Unauthorized | Missing, invalid, or expired authentication token |
-| 403 | Forbidden | Insufficient permissions |
-| 404 | Not Found | Requested resource doesn't exist |
-| 409 | Conflict | Duplicate resource (username, email, etc.) |
-| 500 | Internal Server Error | Unexpected server errors |
-
-### Error Examples
-
-#### Validation Error (400)
-
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "ab", "email": "invalid", "password": "weak"}'
-```
-
-**Response:**
 ```json
 {
   "error": "Validation failed",
   "code": "VALIDATION_ERROR",
   "details": [
-    {
-      "field": "username",
-      "message": "String must contain at least 3 character(s)"
-    },
-    {
-      "field": "email",
-      "message": "Invalid email"
-    },
-    {
-      "field": "password",
-      "message": "It must contain at least one capital letter"
-    }
-  ]
+    { "field": "email", "message": "Must be a valid email" }
+  ],
+  "requestId": "uuid",
+  "stack": "development only"
 }
 ```
 
-#### Authentication Error (401)
+## Environment Variables
+
+Core variables:
+
+- `NODE_ENV`
+- `PORT`
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET` (optional; falls back to `JWT_SECRET`)
+- `JWT_ACCESS_EXPIRES_IN` (default `1d`)
+- `JWT_REFRESH_EXPIRES_IN` (default `7d`)
+- `BCRYPT_ROUNDS`
+- `FRONTEND_ORIGINS` (comma-separated allowlist for production CORS)
+
+## Local Development
 
 ```bash
-# Missing token
-curl http://localhost:3000/api/v1/gratitudes
+npm install
+npx prisma migrate dev
+npx prisma generate
+npm run dev
 ```
 
-**Response:**
-```json
-{
-  "error": "Authentication token required",
-  "code": "AUTHENTICATION_ERROR"
-}
-```
+## Build and Test
 
 ```bash
-# Expired token
-curl http://localhost:3000/api/v1/gratitudes \
-  -H "Authorization: Bearer <expired_token>"
+npm run build
+npm test
 ```
 
-**Response:**
-```json
-{
-  "error": "Token has expired",
-  "code": "AUTHENTICATION_ERROR"
-}
-```
+## Operational Notes
 
-```bash
-# Invalid credentials
-curl -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "wrong", "password": "wrong"}'
-```
+- If you get Prisma `P2021`, run migrations against the same DB URL used at runtime.
+- Registration is transactional: user creation and refresh-session creation succeed or fail together.
 
-**Response:**
-```json
-{
-  "error": "Invalid username or password",
-  "code": "AUTHENTICATION_ERROR"
-}
-```
-
-#### Conflict Error (409)
-
-```bash
-# Duplicate username
-curl -X POST http://localhost:3000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "existing_user",
-    "email": "newemail@example.com",
-    "password": "SecurePass123!",
-    "firstName": "John",
-    "lastName": "Doe"
-  }'
-```
-
-**Response:**
-```json
-{
-  "error": "username already exists",
-  "code": "CONFLICT_ERROR"
-}
-```
-
-#### Not Found Error (404)
-
-```bash
-curl -X GET http://localhost:3000/api/v1/gratitudes/non-existent-uuid \
-  -H "Authorization: Bearer <valid_token>"
-```
-
-**Response:**
-```json
-{
-  "error": "Gratitude not found",
-  "code": "NOT_FOUND_ERROR"
-}
-```
-
-### Error Handling Architecture
-
-The error handling system uses a **centralized global error handler** with custom error classes:
-
-**Custom Error Classes:**
-- `AppError` - Base class for all operational errors
-- `ValidationError` (400) - Zod validation failures
-- `AuthenticationError` (401) - Missing/invalid/expired tokens, invalid credentials
-- `AuthorizationError` (403) - Insufficient permissions
-- `NotFoundError` (404) - Resource not found
-- `ConflictError` (409) - Unique constraint violations
-- `DatabaseError` (500) - Database operation failures
-
-**Error Flow:**
-1. Middleware/Controller/Service throws custom error or native error
-2. Global error handler catches all errors
-3. Transforms native errors (Zod, Prisma, JWT) into custom errors
-4. Formats consistent JSON response
-5. Logs error with appropriate severity level
-6. Returns response with correct HTTP status code
-
-**Prisma Error Transformation:**
-- `P2002` (Unique constraint) → 409 ConflictError with field name
-- `P2025` (Record not found) → 404 NotFoundError
-- `P2003` (Foreign key failed) → 400 ValidationError
-- `P2014` (Required relation) → 400 ValidationError
-- Other Prisma errors → 500 DatabaseError
-
-**Environment-Specific Behavior:**
-- **Development**: Detailed error messages, stack traces included
-- **Production**: Generic error messages for 500 errors, no stack traces
-
-## Current Implementation Status
-
-### ✅ Completed Features
-
-- **Authentication & Authorization**:
-  - User registration with password hashing (bcrypt, configurable rounds via `BCRYPT_ROUNDS`)
-  - User login with JWT token generation (1-day expiration, HS256)
-  - JWT authentication middleware (`authenticateToken`)
-  - Protected routes with Bearer token verification
-  - User model in Prisma schema with relationships
-
-- **CRUD Operations**:
-  - Complete gratitude CRUD operations
-  - User-scoped data access (users can only access their own gratitudes)
-  - User-gratitude relationship enforced at database level
-
-- **Rate Limiting** (applied to all `/api/v1/*` routes):
-  - **Hard limit** (`express-rate-limit`): max 5 requests per IP per 15-minute window; returns 429 with JSON error on breach
-  - **Speed limiter** (`express-slow-down`): progressive delay starting after 3 requests in a 15-minute window (+2 s per excess request)
-
-- **Validation**:
-  - Zod schemas for request validation
-  - Validation middleware for body, params, and query
-  - Strong password requirements (8-50 chars, uppercase, lowercase, number, special char)
-  - Username validation (3-20 chars, alphanumeric + underscore)
-  - Email validation
-
-- **Environment Configuration**:
-  - Centralized `src/config/env.ts` — Zod-validated config parsed once at startup
-  - Fail-fast on missing/invalid environment variables with descriptive messages
-  - Per-environment env files (`.env.development`, `.env.production`)
-  - `BCRYPT_ROUNDS` configurable (8–20), defaults to `10`
-  - Node.js subpath import aliases (`#config/*`, `#routes/*`, etc.) for clean imports
-
-- **Infrastructure**:
-  - Express middleware setup (CORS, JSON parsing)
-  - Prisma ORM integration with PostgreSQL
-  - TypeScript strict mode, `module: "Node16"`, `moduleResolution: "node16"`, `target: "ES2023"`
-  - Database migrations for users and gratitudes
-  - Tag array support for gratitudes
-
-- **Error Handling**:
-  - Comprehensive global error handler middleware
-  - Custom error classes (ValidationError, AuthenticationError, NotFoundError, ConflictError, etc.)
-  - Automatic Zod validation error transformation
-  - Prisma error detection and user-friendly messages
-  - JWT error handling (expired, invalid, missing tokens)
-  - Environment-aware error responses (stack traces in development only)
-  - Consistent JSON error format across all endpoints
-  - Appropriate HTTP status codes (400, 401, 403, 404, 409, 500)
-
-### ⚠️ Known Limitations
-
-1. **No Token Refresh**: JWT tokens expire after 1 day with no refresh mechanism
-2. **CORS Wide Open**: Currently allows all origins (development mode only)
-3. **Aggressive Rate Limit**: 5 req / 15 min is very restrictive — tune before production
-4. **No Request Logging**: Missing request/response logging middleware
-5. **No Password Reset**: Missing password reset functionality
-6. **No Email Verification**: Users can register without email verification
-7. **Gratitude Title Uniqueness**: Title field has global unique constraint (should be per-user)
-
-### 🔮 Future Enhancements
-
-- Token refresh mechanism
-- Password reset functionality
-- Email verification
-- Structured request logging (Morgan or Winston)
-- API documentation (Swagger/OpenAPI)
-- Unit and integration tests
-- CI/CD pipeline
-- Environment-based CORS configuration
-- Error monitoring service integration (Sentry, Rollbar)
-- Tune rate limit thresholds per route (e.g. stricter on auth endpoints)
-
-## Security Features
-
-### Authentication & Authorization
-- **Password Hashing**: bcrypt with 10 salt rounds
-- **JWT Tokens**: HS256 algorithm with 1-day expiration
-- **Protected Routes**: All gratitude endpoints require valid JWT
-- **User Data Isolation**: Users can only access their own data
-
-### Validation
-- **Input Validation**: Zod schemas validate all request data
-- **Password Requirements**:
-  - Minimum 8 characters, maximum 50
-  - At least one uppercase letter
-  - At least one lowercase letter
-  - At least one number
-  - At least one special character
-- **Username Rules**: 3-20 characters, alphanumeric + underscore only
-- **Email Validation**: Proper email format required
-
-### Error Handling
-- **Centralized Error Handler**: All errors flow through global middleware
-- **Type-Safe Error Classes**: Custom error hierarchy with proper HTTP status codes
-- **Secure Error Messages**: Generic messages in production, detailed in development
-- **No Sensitive Data Leaks**: Stack traces and internal details hidden in production
-- **Consistent Error Format**: Standardized JSON responses for all error types
-
-### Rate Limiting
-- **Hard cap** (express-rate-limit): 5 requests / IP / 15 min — returns `429 Too Many Requests` with JSON message on breach
-- **Progressive slowdown** (express-slow-down): delays start after the 3rd request in a 15-minute window, adding +2 s per extra request
-- Both limiters are applied globally to all `/api/v1/*` routes
-
-### Best Practices
-- Passwords never stored in plain text
-- JWT secrets stored in environment variables
-- User IDs embedded in tokens (no user lookup on every request)
-- Unique constraints on username and email
-- TypeScript for type safety
-- Environment-aware error responses
-- Proper HTTP status code usage
-
-## Integration with Frontend
-
-The backend is designed to work with the React frontend located at:
-`/Users/gusanche/fsdev/fullstack/gratitude-frontend-app`
-
-### Frontend Tech Stack
-- **Framework**: React 19.2.0 with TypeScript
-- **Build Tool**: Vite 7.2.4
-- **Styling**: TailwindCSS 4.1.18
-- **Icons**: React Icons + Font Awesome
-
-### CORS Configuration
-
-CORS is enabled for all origins (development mode). Configure appropriately for production:
-
-```javascript
-// For production
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'https://yourdomain.com'
-}));
-```
-
-### Frontend Integration Guide
-
-**1. API Base URL**
-```javascript
-const API_BASE_URL = 'http://localhost:3000/api/v1';
-```
-
-**2. Authentication Flow**
-```javascript
-// Register
-const response = await fetch(`${API_BASE_URL}/auth/register`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username, email, password, firstName, lastName })
-});
-const { token, user } = await response.json();
-localStorage.setItem('token', token);
-
-// Login
-const response = await fetch(`${API_BASE_URL}/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username, password })
-});
-const { token, user } = await response.json();
-localStorage.setItem('token', token);
-```
-
-**3. Protected API Calls**
-```javascript
-const token = localStorage.getItem('token');
-const response = await fetch(`${API_BASE_URL}/gratitudes`, {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  }
-});
-```
-
-**4. Frontend TODO**
-- [ ] Create Login/Register pages
-- [ ] Implement token storage (localStorage/sessionStorage)
-- [ ] Create authentication context
-- [ ] Add Authorization header to all API calls
-- [ ] Handle token expiration (401/403 responses)
-- [ ] Implement logout functionality
-- [ ] Wire up edit/delete buttons on gratitude cards
-
-## Development Roadmap
-
-### ✅ Phase 1: Complete Authentication
-- [x] Wire up auth routes to main router
-- [x] Complete user registration endpoint
-- [x] Add User model to Prisma schema
-- [x] Implement login endpoint
-- [x] Create authentication middleware
-- [x] Add request validation with Zod
-
-### ✅ Phase 2: Secure Gratitudes
-- [x] Add user-gratitude relationship
-- [x] Protect gratitude routes with auth middleware
-- [x] Filter gratitudes by authenticated user
-- [x] Add user context to controllers
-
-### ✅ Phase 3: Error Handling
-- [x] Create custom error classes hierarchy
-- [x] Implement global error handler middleware
-- [x] Transform Zod validation errors
-- [x] Transform Prisma database errors
-- [x] Handle JWT authentication errors
-- [x] Consistent error response format
-- [x] Environment-aware error responses
-
-### ✅ Phase 4: Project Infrastructure & Config
-- [x] Centralized environment config module with Zod validation (`src/config/env.ts`)
-- [x] Per-environment env files (`.env.development`, `.env.production`)
-- [x] Node.js subpath import aliases (`#*` → `./src/*`)
-- [x] TypeScript updated to `Node16` modules + `ES2023` target
-- [x] `BCRYPT_ROUNDS` externalized to environment config
-- [x] `.env.example` fully documented with all required variables
-
-### 🚧 Phase 5: Frontend Integration (Current)
-- [ ] Build Login/Register UI in frontend
-- [ ] Implement token management in frontend
-- [ ] Wire up frontend authentication context
-- [ ] Connect frontend CRUD operations to backend
-- [ ] Handle authentication errors gracefully in UI
-- [ ] Display validation errors on forms
-
-### ✅ Phase 5.5: Rate Limiting & Deployment Fixes
-- [x] Add `express-rate-limit` (5 req / 15 min hard cap, JSON error response)
-- [x] Add `express-slow-down` (progressive delay after 3 req / 15 min)
-- [x] Apply both limiters to all `/api/v1/*` routes
-- [x] Fix Node.js conditional path exports (`development` vs `default`)
-- [x] Fix production dist path (`dist/src/index.js`)
-- [x] Remove `--env-file` from production start script (env managed externally)
-- [x] Remove `PORT` from `.env.example` (defaults to `3000` via Zod schema)
-- [x] Fully document `.env.example` with all required variables
-
-### 📋 Phase 7: Production Readiness
-- [ ] Implement refresh token rotation
-- [ ] Add password reset functionality
-- [ ] Add email verification
-- [ ] Tune rate limits per route (stricter on `/auth/*`)
-- [ ] Add request logging (Morgan/Winston)
-- [ ] Environment-based CORS configuration
-- [ ] Add health check endpoint
-- [ ] Set up database connection pooling
-
-### 🧪 Phase 8: Testing & Quality
-- [ ] Write unit tests for services (Jest/Vitest)
-- [ ] Write integration tests for routes (Supertest)
-- [ ] Add API documentation (Swagger/OpenAPI)
-- [ ] Set up CI/CD pipeline (GitHub Actions)
-- [ ] Add code coverage reporting
-- [ ] Add database seeding scripts
-- [ ] Performance testing and optimization
-
-## Scripts
-
-```json
-{
-  "dev": "NODE_OPTIONS='--conditions=development' tsx --watch --env-file .env.development src/index.ts",
-  "start": "node dist/src/index.js",
-  "build": "tsc",
-  "test": "echo \"Error: no test specified\" && exit 1"
-}
-```
-
-- `dev` — sets `NODE_OPTIONS='--conditions=development'` to activate dev path aliases, runs in watch mode loading `.env.development`
-- `start` — runs the compiled output from `dist/src/index.js`; production env variables must be supplied externally (not via `--env-file`)
-- `build` — compiles TypeScript to `dist/` via `tsc`
-
-## Contributing
-
-This is a personal project. For changes:
-1. Create a feature branch
-2. Make your changes
-3. Test thoroughly
-4. Commit with descriptive messages
-5. Update this README if needed
-
-## Recent Git History
-
-```
-f8f7e7b Fix module path resolution for production deployment
-98b905f Remove --env-file flag from production start script
-092fb98 Fix start script to point to correct dist output path
-ecb365b Remove PORT from .env.example
-92ce6ad Refactor project structure and add environment config module
-f71d823 Implement comprehensive error handling system
-8dc03a3 Update README.md with comprehensive project analysis
-```
-
-## License
-
-Private project - All rights reserved
-
----
-
-**Last Updated:** 2026-02-23
-**Status:** Backend Complete — Frontend Integration in Progress
-**Version:** 1.3.0 (Rate Limiting & Deployment Fixes)

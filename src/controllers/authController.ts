@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import bcrypt from "bcrypt";
-import { generateToken } from "../utils/jwt.js";
-import { hashPasswords, comparePasswords } from "../utils/passwords.js";
-import { registerUser, login } from "../services/authServices.js";
+import {
+  registerUser,
+  login,
+  refreshAuthSession,
+  logoutAuthSession,
+} from "../services/authServices.js";
 import { AuthenticationError } from "../utils/errors.js";
 
 export const loginUser = async (
@@ -20,7 +22,8 @@ export const loginUser = async (
     return res.status(200).json({
       message: "Login success",
       user: data.validatedUser,
-      token: data.token
+      token: data.accessToken,
+      refreshToken: data.refreshToken,
     });
   } catch (error) {
     next(error);
@@ -33,13 +36,50 @@ export const registerNewUser = async (
   next: NextFunction,
 ) => {
   try {
-    const { email, username, password, firstName, lastName } = req.body;
     const data = await registerUser(req.body);
 
     return res.status(201).json({
       message: "User created",
       user: data.newUser,
-      token: data.token
+      token: data.accessToken,
+      refreshToken: data.refreshToken,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const refreshUserToken = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { refreshToken: refreshTokenValue } = req.body;
+    const data = await refreshAuthSession(refreshTokenValue);
+
+    return res.status(200).json({
+      message: "Token refreshed",
+      user: data.user,
+      token: data.accessToken,
+      refreshToken: data.refreshToken,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const logoutUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { refreshToken } = req.body;
+    await logoutAuthSession(refreshToken);
+
+    return res.status(200).json({
+      message: "Logout successful",
     });
   } catch (error) {
     next(error);

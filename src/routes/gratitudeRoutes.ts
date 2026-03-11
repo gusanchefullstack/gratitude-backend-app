@@ -10,12 +10,13 @@ import {
   createGratitudeBodySchema,
   updateGratitudeBodySchema,
   gratitudeParamsSchema,
+  gratitudeListQuerySchema,
 } from "../schemas/gratitude.schema.js";
-import { validateParams, validateBody } from "../middleware/validation.js";
+import { validateParams, validateBody, validateQuery } from "../middleware/validation.js";
 
 
 const gratitudesRouter = Router();
-gratitudesRouter.get("/", getAllGratitudes);
+gratitudesRouter.get("/", validateQuery(gratitudeListQuerySchema), getAllGratitudes);
 gratitudesRouter.get(
   "/:id",
   validateParams(gratitudeParamsSchema),

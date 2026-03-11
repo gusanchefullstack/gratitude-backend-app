@@ -4,6 +4,7 @@ export const uuidSchema = z.uuid({ error: "Must be a valid uuid" });
 export const dateSchema = z.iso.datetime({ error: "Must be a valid ISO date" });
 export const passwordSchema = z
   .string()
+  .trim()
   .min(8, { error: "The password must be at least 8 characters long" })
   .max(50, { error: "The password cannot exceed 50 characters" })
   .regex(/[A-Z]/, { error: "It must contain at least one capital letter" })

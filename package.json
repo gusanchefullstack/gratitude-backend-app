@@ -10,7 +10,7 @@
     "dev": "NODE_OPTIONS='--conditions=development' tsx --watch --env-file .env.development src/index.ts",
     "start": "node dist/src/index.js",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "NODE_OPTIONS='--conditions=development' vitest run"
   },
   "imports": {
     "#*": {
@@ -27,6 +27,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "express-slow-down": "^3.0.1",
+    "helmet": "^8.1.0",
     "jose": "^6.1.3",
     "pg": "^8.16.3",
     "zod": "^4.3.6"
@@ -37,8 +38,11 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.5",
     "@types/pg": "^8.16.0",
+    "@types/supertest": "^7.2.0",
     "prisma": "^7.2.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

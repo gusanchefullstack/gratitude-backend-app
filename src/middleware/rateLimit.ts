@@ -12,3 +12,15 @@ export const speedLimiter = slowDown({
   delayAfter: 30,
   delayMs: () => 2000,
 });
+
+export const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Too many authentication attempts, please try again later." },
+});
+
+export const authSpeedLimiter = slowDown({
+  windowMs: 15 * 60 * 1000,
+  delayAfter: 5,
+  delayMs: () => 2000,
+});

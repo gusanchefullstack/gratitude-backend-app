@@ -10,6 +10,7 @@ import {
   ConflictError,
   DatabaseError,
 } from "../utils/errors.js";
+import { RequestWithId } from "./observability.js";
 
 export const errorHandler = (
   error: Error,
@@ -17,6 +18,8 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ) => {
+  const requestWithId = req as RequestWithId;
+  const requestId = requestWithId.requestId;
   let finalError: AppError;
 
   // Handle custom AppError instances
@@ -61,11 +64,11 @@ export const errorHandler = (
   const isClientError = finalError.statusCode < 500;
   if (isClientError) {
     console.warn(
-      `[${new Date().toISOString()}] ${req.method} ${req.path} - ${finalError.statusCode}: ${finalError.message}`
+      `[${new Date().toISOString()}] [requestId:${requestId ?? "unknown"}] ${req.method} ${req.path} - ${finalError.statusCode}: ${finalError.message}`
     );
   } else {
     console.error(
-      `[${new Date().toISOString()}] ${req.method} ${req.path} - ${finalError.statusCode}: ${finalError.message}`
+      `[${new Date().toISOString()}] [requestId:${requestId ?? "unknown"}] ${req.method} ${req.path} - ${finalError.statusCode}: ${finalError.message}`
     );
     console.error(error.stack);
   }
@@ -76,6 +79,7 @@ export const errorHandler = (
     code?: string;
     details?: Array<{ field: string; message: string }>;
     stack?: string;
+    requestId?: string;
   } = {
     error: finalError.message,
   };
@@ -90,6 +94,9 @@ export const errorHandler = (
   // Include stack trace only in development mode
   if (config.NODE_ENV === "development") {
     errorResponse.stack = error.stack;
+  }
+  if (requestId) {
+    errorResponse.requestId = requestId;
   }
 
   // Send error response

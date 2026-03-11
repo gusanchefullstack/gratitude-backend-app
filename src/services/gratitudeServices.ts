@@ -1,15 +1,24 @@
 import { prisma } from "../../lib/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { ConflictError, NotFoundError, DatabaseError } from "../utils/errors.js";
+
+type GratitudeListQuery = {
+  page: number;
+  limit: number;
+  search?: string;
+  tag?: string;
+  sortBy: "createdAt" | "updatedAt" | "title";
+  order: "asc" | "desc";
+};
 export const createGratitudeSvc = async (data: Prisma.GratitudeUncheckedCreateInput) => {
   try {
-      const listIfGratitude = await prisma.gratitude.create({
+      const createdGratitude = await prisma.gratitude.create({
         data
       })
       return {
         status: "Created",
-        data: Array(listIfGratitude),
-        items: Array(listIfGratitude).length,
+        data: createdGratitude,
+        items: 1,
       };
   } catch (error) {
     // Transform Prisma errors into custom errors
@@ -34,17 +43,64 @@ export const createGratitudeSvc = async (data: Prisma.GratitudeUncheckedCreateIn
     throw error;
   }
 };
-export const readAllGratitudesSvc = async (userId:string) => {
+export const readAllGratitudesSvc = async (
+  userId: string,
+  query: GratitudeListQuery,
+) => {
   try {
-    const listOfGratitude = await prisma.gratitude.findMany({
-      where: {
-        userId
-      }
-    });
+    const { page, limit, search, tag, sortBy, order } = query;
+    const skip = (page - 1) * limit;
+    const where: Prisma.GratitudeWhereInput = {
+      userId,
+    };
+
+    if (search) {
+      where.OR = [
+        {
+          title: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          details: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
+
+    if (tag) {
+      where.tags = {
+        has: tag,
+      };
+    }
+
+    const [listOfGratitude, totalItems] = await prisma.$transaction([
+      prisma.gratitude.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          [sortBy]: order,
+        },
+      }),
+      prisma.gratitude.count({ where }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+
     return {
       status: "Ok",
       data: listOfGratitude,
       items: listOfGratitude.length,
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages,
+      },
     };
   } catch (error) {
     // Transform Prisma errors into custom errors
@@ -59,25 +115,20 @@ export const readAllGratitudesSvc = async (userId:string) => {
 
 export const readOneGratitudeSvc = async (userId:string, id: string) => {
   try {
-    const listOfGratitude = await prisma.gratitude.findUnique({
+    const gratitude = await prisma.gratitude.findUnique({
       where: {
           userId,
           id
         }
     });
-    if (!listOfGratitude) {
-      return {
-        status: "Ok",
-        data: [],
-        items: 0,
-      };
-    } else {
-      return {
-        status: "Ok",
-        data: Array(listOfGratitude),
-        items: Array(listOfGratitude).length,
-      };
+    if (!gratitude) {
+      throw new NotFoundError("Gratitude not found");
     }
+    return {
+      status: "Ok",
+      data: gratitude,
+      items: 1,
+    };
   } catch (error) {
     // Transform Prisma errors into custom errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -92,11 +143,11 @@ export const readOneGratitudeSvc = async (userId:string, id: string) => {
 
 export const updateGratitudeSvc = async (userId: string, id: string, data: Prisma.GratitudeUncheckedUpdateInput) => {
   try {
-    const listOfGratitude = await prisma.gratitude.update({where:{userId, id}, data:{...data}})
+    const updatedGratitude = await prisma.gratitude.update({where:{userId, id}, data:{...data}})
     return {
         status: "Updated",
-        data: Array(listOfGratitude),
-        items: Array(listOfGratitude).length,
+        data: updatedGratitude,
+        items: 1,
       };
   } catch (error) {
     // Transform Prisma errors into custom errors
@@ -124,15 +175,15 @@ export const updateGratitudeSvc = async (userId: string, id: string, data: Prism
 
 export const deleteGratitudeSvc = async (userId:string, id: string) => {
   try {
-    const listOfGratitude = await prisma.gratitude.delete({
+    const deletedGratitude = await prisma.gratitude.delete({
       where: {
         id,
         userId
     }})
     return {
         status: "Deleted",
-        data: Array(listOfGratitude),
-        items: Array(listOfGratitude).length,
+        data: deletedGratitude,
+        items: 1,
       };
   } catch (error) {
     // Transform Prisma errors into custom errors

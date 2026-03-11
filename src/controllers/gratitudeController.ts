@@ -7,6 +7,7 @@ import {
   deleteGratitudeSvc,
 } from "#services/gratitudeServices.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
+import { gratitudeListQuerySchema } from "../schemas/gratitude.schema.js";
 
 export const createGratitude = async (
   req: AuthenticatedRequest,
@@ -30,7 +31,8 @@ export const getAllGratitudes = async (
 ) => {
   try {
     const userId = req.user!.id;
-    const response = await readAllGratitudesSvc(userId);
+    const query = gratitudeListQuerySchema.parse(req.query);
+    const response = await readAllGratitudesSvc(userId, query);
     return res.json(response);
   } catch (error) {
     next(error);

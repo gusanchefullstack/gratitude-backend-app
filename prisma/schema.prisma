@@ -21,6 +21,7 @@ model User {
   lastName   String
   email      String      @unique
   gratitudes Gratitude[]
+  refreshSessions RefreshSession[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -38,4 +39,19 @@ model Gratitude {
   updatedAt DateTime @updatedAt
 
   @@map("gratitudes")
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_sessions")
 }
